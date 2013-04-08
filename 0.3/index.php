@@ -162,16 +162,16 @@ function versionCheck() {
 /**
 *   RSS Feed
 **/
+if( !file_exists(RSS_FILE)) {
+    require_once('class_rssfeed.php');
+    $rss = new AutoblogRSS(RSS_FILE);
+    $rss->create('Projet Autoblog'. ((!empty($head_title)) ? ' | '. $head_title : ''), serverUrl(true),"Projet Autoblog - RSS : Ajouts et changements de disponibilité.", serverUrl(true) . RSS_FILE);
+}
 if (isset($_GET['rss'])) {
     require_once('class_rssfeed.php');
     $rss = new AutoblogRSS(RSS_FILE);
     $rss->displayXML();
     die;
-}
-if( !file_exists(RSS_FILE)) {
-    require_once('class_rssfeed.php');
-    $rss = new AutoblogRSS(RSS_FILE);
-    $rss->create('Projet Autoblog'. ((!empty($head_title)) ? ' | '. $head_title : ''), serverUrl(true),"Projet Autoblog - RSS : Ajouts et changements de disponibilité.", serverUrl(true) . '/' . RSS_FILE);
 }
 
 /**
@@ -566,7 +566,7 @@ if( !empty($_POST['generic']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY_L
                 $error = array_merge( $error, createAutoblog('generic', $sitename, $siteurl, $rssurl, $error));
 
                 if( empty($error))
-                    $success[] = '<iframe width="1" height="1" frameborder="0" src="'. urlToFolderSlash( $siteurl ) .'/index.php"></iframe><b style="color:darkgreen">Autoblog '. $sitename .' crée avec succès.</b> &rarr; <a target="_blank" href="'. urlToFolderSlash( $siteurl ) .'">afficher l\'autoblog</a>';
+                    $success[] = '<iframe width="1" height="1" frameborder="0" src="'. urlToFolderSlash( $siteurl ) .'/index.php"></iframe><b style="color:darkgreen">Autoblog '. $sitename .' crée avec succès.</b> &rarr; <a target="_blank" href="'. AUTOBLOGS_FOLDER . urlToFolderSlash( $siteurl ) .'">afficher l\'autoblog</a>';
             }
             else {
                 // checking procedure
