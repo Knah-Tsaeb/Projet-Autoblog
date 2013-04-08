@@ -53,5 +53,5 @@ $autoblog_farm = array(
 
 // personnal option
 $myOptions['enableThumbShot'] = false;
-$myOptions['externalThumbSdhot'] = 'http://exemple.com/?url=';
+$myOptions['externalThumbSdhot'] = '';
 ?>
