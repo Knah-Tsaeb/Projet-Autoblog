@@ -872,8 +872,15 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
                 foreach ($autoblogs as $key => $autoblog) {
                     $opml_link='<a href="'.$key.'/?opml">opml</a>';
                     $autoblogs_display .= '<div class="vignette">
-                            <div class="title"><a title="'.escape($autoblog->site_title).'" href="'.$key.'/"><img width="15" height="15" alt="" src="./?check='.$key.'"> '.escape($autoblog->site_title).'</a></div>
-                            <div class="source">config <sup><a href="'.$key.'/vvb.ini">ini</a> '.$opml_link.'</sup> | '.escape($autoblog->site_type).' source: <a href="'.escape($autoblog->site_url).'">'.escape($autoblog->site_url).'</a></div>
+                            <div class="title"><a title="'.escape($autoblog->site_title).'" href="'.$key.'/"><img width="15" height="15" alt="" src="./?check='.$key.'"> '.escape($autoblog->site_title).'</a></div>';
+                    if($myOptions['enableThumbShot'] === true){
+                      if(file_exists(ROOT_DIR . '/' . $unit . '/thumbshot.png')){
+                        $autoblogs_display .= '<div class="thumbshot"><img src="'.ROOT_DIR . '/' . $unit . '/thumbshot.png" title="Thumbshot de '.escape($autoblog->site_title).'"/></div>';
+                      } elseif(!empty($myOptions['externalThumbSdhot'])) {
+                        $autoblogs_display .= '<div class="thumbshot"><img src="'.$myOptions['externalThumbSdhot'].rawurlencode(escape($autoblog->site_url)).'" title="Thumbshot de '.escape($autoblog->site_title).'"/></div>';
+                      }
+                    }
+                    $autoblogs_display .= '<div class="source">config <sup><a href="'.$key.'/vvb.ini">ini</a> '.$opml_link.'</sup> | '.escape($autoblog->site_type).' source: <a href="'.escape($autoblog->site_url).'">'.escape($autoblog->site_url).'</a></div>
                         </div>';
                 }
             }

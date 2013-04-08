@@ -37,7 +37,7 @@ $apitwitter = FALSE;
 $logo=RESOURCES_FOLDER .'icon-logo.svg';
 
 // Marquez ici votre propre message qui apparaîtra en bas de page.
-// exemple : 
+// exemple :
 //$HTML_footer="<br/><a href='http://datalove.me/'>Love data</a><br/>Data is essential<br/>Data must flow<br/>Data must be used<br/>Data is neither good nor bad<br/>There is no illegal data<br/>Data is free<br/>Data can not be owned<br/>No man, machine or system shall interrupt the flow of data<br/>Locking data is a crime against datanity";
 $HTML_footer='D\'après les premières versions de <a href="http://sebsauvage.net">SebSauvage</a> et <a href="http://bohwaz.net/">Bohwaz</a>.';
 
@@ -50,4 +50,8 @@ $autoblog_farm = array(
     'https://www.ecirtam.net/autoblogs/?export',
     'https://autoblog.suumitsu.eu/?export', */
 );
+
+// personnal option
+$myOptions['enableThumbShot'] = false;
+$myOptions['externalThumbSdhot'] = 'http://exemple.com/?url=';
 ?>

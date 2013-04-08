@@ -37,8 +37,11 @@ h1 {
 .thumbshot img {
   width: 200px;
   height: 160px;
+  float: left;
 }
 
 .source {
   text-align: left;
+  clear:both;
+  padding : 0.3em;
 }
