@@ -115,8 +115,9 @@ function create_from_opml($opml) {
                 $sitename = escape( $outline['title'] );
                 $siteurl = escape($outline['htmlUrl']);
                 $sitetype = escape($outline['text']); if ( $sitetype == 'generic' or $sitetype == 'microblog' or $sitetype == 'shaarli') { } else { $sitetype = 'generic'; }
+                $siteDesc = getSiteDesc(escape($siteurl));
 
-                $error = array_merge( $error, createAutoblog( $sitetype, $sitename, $siteurl, $rssurl, $error ) );
+                $error = array_merge( $error, createAutoblog( $sitetype, $sitename, $siteurl, $rssurl, $siteDesc, $error ) );
 
                 if( empty ( $error ))
                     $success[] = '<iframe width="1" height="1" frameborder="0" src="'. urlToFolderSlash( $siteurl ) .'/index.php"></iframe>Autoblog "'. $sitename .'" crée avec succès. &rarr; <a target="_blank" href="'. urlToFolderSlash( $siteurl ) .'">afficher l\'autoblog</a>.';
@@ -426,8 +427,9 @@ if(!empty($_GET['via_button']) && $_GET['number'] === '17' && ALLOW_NEW_AUTOBLOG
                 $sitename = escape($_GET['sitename']);
                 $sitetype = updateType($siteurl); // Disabled input doesn't send POST data
                 $sitetype = $sitetype['type'];
+                $siteDesc = getSiteDesc(escape($_GET['siteDesc']));
 
-                $error = array_merge( $error, createAutoblog($sitetype, $sitename, $siteurl, $rssurl, $error));
+                $error = array_merge( $error, createAutoblog($sitetype, $sitename, $siteurl, $rssurl, $siteDesc, $error));
                 if( empty($error)) {
                     $form .= '<iframe width="1" height="1" frameborder="0" src="'. urlToFolderSlash($siteurl) .'/index.php"></iframe>';
                     $form .= '<p><span style="color:darkgreen">Autoblog <a href="'. urlToFolderSlash($siteurl) .'">'. $sitename .'</a> ajouté avec succès.</span><br>';
@@ -453,14 +455,16 @@ if(!empty($_GET['via_button']) && $_GET['number'] === '17' && ALLOW_NEW_AUTOBLOG
                     $sitename = get_title_from_datafeed($datafeed);
                     $sitetype = updateType($siteurl);
                     $sitetype = $sitetype['type'];
+                    $siteDesc = getSiteDesc(escape($siteurl));
 
                     $form .= '<span style="color:blue">Merci de vérifier les informations suivantes, corrigez si nécessaire.</span><br>
                     <form method="GET">
                     <input type="hidden" name="via_button" value="1"><input type="hidden" name="add" value="1"><input type="hidden" name="number" value="17">
-                    <input style="width:30em;" type="text" name="sitename" id="sitename" value="'.$sitename.'"><label for="sitename">&larr; titre du site (auto)</label><br>
-                    <input style="width:30em;" placeholder="Adresse du site" type="text" name="siteurl" id="siteurl" value="'.$siteurl.'"><label for="siteurl">&larr; page d\'accueil (auto)</label><br>
-                    <input style="width:30em;" placeholder="Adresse du flux RSS/ATOM" type="text" name="rssurl" id="rssurl" value="'.$rssurl.'"><label for="rssurl">&larr; adresse du flux</label><br>
-                    <input style="width:30em;" type="text" name="sitetype" id="sitetype" value="'.$sitetype.'" disabled><label for="sitetype">&larr; type de site</label><br>
+                    <input style="width:450px;" type="text" name="sitename" id="sitename" value="'.$sitename.'"><label for="sitename">&larr; titre du site (auto)</label><br>
+                    <input style="width:450px;" placeholder="Adresse du site" type="text" name="siteurl" id="siteurl" value="'.$siteurl.'"><label for="siteurl">&larr; page d\'accueil (auto)</label><br>
+                    <input style="width:450px;" placeholder="Adresse du flux RSS/ATOM" type="text" name="rssurl" id="rssurl" value="'.$rssurl.'"><label for="rssurl">&larr; adresse du flux</label><br>
+                    <input style="width:450px;" type="text" name="sitetype" id="sitetype" value="'.$sitetype.'" disabled><label for="sitetype">&larr; type de site</label><br>
+                    <textarea style="width:450px;height:8em;" type="text" name="siteDesc" id="siteDesc">'.escape($siteDesc).'</textarea><label for="siteDesc">&larr; description de site</label><br>
                     <input type="submit" value="Créer"></form>';
                 }
                 else {
@@ -533,7 +537,7 @@ if(!empty($_POST['socialaccount']) && !empty($_POST['socialinstance']) && ALLOW_
                 }
             }
             if( empty($error) ) {
-                $error = array_merge( $error, createAutoblog($sitetype, ucfirst($socialinstance) .' - '. $socialaccount, $siteurl, $rssurl, $error));
+                $error = array_merge( $error, createAutoblog($sitetype, ucfirst($socialinstance) .' - '. $socialaccount, $siteurl, $rssurl,$siteDesc, $error));
                 if( empty($error))
                     $success[] = '<iframe width="1" height="1" frameborder="0" src="'. urlToFolderSlash( $siteurl ) .'/index.php"></iframe><b style="color:darkgreen">'.ucfirst($socialinstance) .' - '. $socialaccount.' <a href="'.urlToFolderSlash( $siteurl ).'">ajouté avec succès</a>.</b>';
             }
@@ -562,8 +566,9 @@ if( !empty($_POST['generic']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY_L
 
                 $siteurl = escape($_POST['siteurl']);
                 $sitename = get_title_from_feed($rssurl);
+                $siteDesc = escape($_POST['siteDesc']);
 
-                $error = array_merge( $error, createAutoblog('generic', $sitename, $siteurl, $rssurl, $error));
+                $error = array_merge( $error, createAutoblog('generic', $sitename, $siteurl, $rssurl, $siteDesc, $error));
 
                 if( empty($error))
                     $success[] = '<iframe width="1" height="1" frameborder="0" src="'. urlToFolderSlash( $siteurl ) .'/index.php"></iframe><b style="color:darkgreen">Autoblog '. $sitename .' crée avec succès.</b> &rarr; <a target="_blank" href="'. AUTOBLOGS_FOLDER . urlToFolderSlash( $siteurl ) .'">afficher l\'autoblog</a>';
@@ -578,12 +583,14 @@ if( !empty($_POST['generic']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY_L
                 $sitetype = 'generic';
                 $siteurl = get_link_from_datafeed($datafeed);
                 $sitename = get_title_from_datafeed($datafeed);
+                $siteDesc = getSiteDesc(escape($siteurl));
 
                 $form = '<span style="color:blue">Merci de vérifier les informations suivantes, corrigez si nécessaire.</span><br>
                 <form method="POST"><input type="hidden" name="generic" value="1" />
                 <input style="color:black" type="text" id="sitename" value="'.$sitename.'" '.( $datafeed === false?'':'disabled').'><label for="sitename">&larr; titre du site (auto)</label><br>
                 <input placeholder="Adresse du site" type="text" name="siteurl" id="siteurl" value="'.$siteurl.'"><label for="siteurl">&larr; page d\'accueil (auto)</label><br>
                 <input placeholder="Adresse du flux RSS/ATOM" type="text" name="rssurl" id="rssurl" value="'.$rssurl.'"><label for="rssurl">&larr; adresse du flux</label><br>
+                <textarea style="width:450px;height:8em;" type="text" name="siteDesc" id="siteDesc">'.escape($siteDesc).'</textarea><label for="siteDesc">&larr; description de site</label><br>
                 <input placeholder=""Type de site" type="text" name="sitetype" id="sitetype" value="'.$sitetype.'" '.( $datafeed === false?'':'disabled').'><label for="sitetype">&larr; type de site</label><br>
                 <input placeholder="Antibot: '. escape($_POST['antibot']) .' en chiffre" type="text" name="number"  value="'. escape($_POST['number']) .'"><label for="number">&larr; antibot</label><br>
                 <input type="hidden" name="antibot" value="'. escape($_POST['antibot']) .'" /><input type="submit" value="Créer"></form>';
@@ -873,10 +880,12 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
                     $autoblogs_display .= '<div class="vignette">
                             <div class="title"><a title="'.escape($autoblog->site_title).'" href="'.$key.'/"><img width="15" height="15" alt="" src="./?check='.$key.'"> '.escape($autoblog->site_title).'</a></div>';
                     if($myOptions['enableThumbShot'] === true){
-                      if(file_exists(ROOT_DIR . '/' . $unit . '/thumbshot.png')){
-                        $autoblogs_display .= '<div class="thumbshot"><img src="'.ROOT_DIR . '/' . $unit . '/thumbshot.png" title="Thumbshot de '.escape($autoblog->site_title).'"/></div>';
+                      if(file_exists(ROOT_DIR . '/' . $key . '/thumbshot.png')){
+                        $autoblogs_display .= '<div class="thumbshot"><img src="'.ROOT_DIR . '/' . $key . '/thumbshot.png" title="Thumbshot de '.escape($autoblog->site_title).'"/></div>
+                                               <div class="siteDesc">'.shortSiteDesc(escape($autoblog->site_meta_description)).'</div>';
                       } elseif(!empty($myOptions['externalThumbSdhot'])) {
-                        $autoblogs_display .= '<div class="thumbshot"><img src="'.$myOptions['externalThumbSdhot'].rawurlencode(escape($autoblog->site_url)).'" title="Thumbshot de '.escape($autoblog->site_title).'"/></div>';
+                        $autoblogs_display .= '<div class="thumbshot"><img src="'.$myOptions['externalThumbSdhot'].rawurlencode(escape($autoblog->site_url)).'" title="Thumbshot de '.escape($autoblog->site_title).'"/></div>
+                                               <div class="siteDesc">'.shortSiteDesc(escape($autoblog->site_meta_description)).'</div>';
                       }
                     }
                     $autoblogs_display .= '<div class="source">config <sup><a href="'.$key.'/vvb.ini">ini</a> '.$opml_link.'</sup> | '.escape($autoblog->site_type).' source: <a href="'.escape($autoblog->site_url).'">'.escape($autoblog->site_url).'</a></div>

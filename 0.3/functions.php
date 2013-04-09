@@ -54,7 +54,24 @@ function escape($str) {
     return htmlspecialchars($str, ENT_COMPAT, 'UTF-8', false);
 }
 
-function createAutoblog($type, $sitename, $siteurl, $rssurl, $error = array()) {
+function getSiteDesc($url){
+ $allMeta = get_meta_tags($url);
+  if(!empty($allMeta['description'])){
+    return $allMeta['description'];
+  } else {
+    return 'Pas de description trouvé';
+  }
+}
+
+function shortSiteDesc($desc, $length = 145){
+  $charset = 'UTF-8';
+  if(mb_strlen($desc, $charset) > $length) {
+    $desc = mb_substr($desc, 0, $length, $charset) . '...';
+  }
+  return $desc;
+}
+
+function createAutoblog($type, $sitename, $siteurl, $rssurl, $siteDesc, $error = array()) {
     if( $type == 'generic' || empty( $type )) {
         $var = updateType( $siteurl );
         $type = $var['type'];
@@ -63,23 +80,22 @@ function createAutoblog($type, $sitename, $siteurl, $rssurl, $error = array()) {
         	    $sitename = ucfirst($var['name']) . ' - ' . $sitename;
         }
     }
-    
-	if(folderExists($siteurl)) { 
-		$error[] = 'Erreur : l\'autoblog '. $sitename .' existe déjà.'; 
+
+	if(folderExists($siteurl)) {
+		$error[] = 'Erreur : l\'autoblog '. $sitename .' existe déjà.';
 		return $error;
 	}
 
-	$foldername = AUTOBLOGS_FOLDER . urlToFolderSlash($siteurl);	
-	
+	$foldername = AUTOBLOGS_FOLDER . urlToFolderSlash($siteurl);
 	if ( mkdir($foldername, 0755, false) ) {
-        
-        /** 
+
+        /**
          * RSS
          **/
         require_once('class_rssfeed.php');
         $rss = new AutoblogRSS(RSS_FILE);
         $rss->addNewAutoblog($sitename, $foldername, $siteurl, $rssurl);
-         
+
         $fp = fopen($foldername .'/index.php', 'w+');
         if( !fwrite($fp, "<?php require_once '../autoblog.php'; ?>") )
             $error[] = "Impossible d'écrire le fichier index.php";
@@ -90,6 +106,7 @@ function createAutoblog($type, $sitename, $siteurl, $rssurl, $error = array()) {
 SITE_TYPE="'. $type .'"
 SITE_TITLE="'. $sitename .'"
 SITE_DESCRIPTION="Site original : <a href=\''. $siteurl .'\'>'. $sitename .'</a>"
+SITE_META_DESCRIPTION="'.$siteDesc.'"
 SITE_URL="'. $siteurl .'"
 FEED_URL="'. $rssurl .'"
 ARTICLES_PER_PAGE="'. getArticlesPerPage( $type ) .'"
@@ -144,7 +161,7 @@ function updateType($siteurl) {
     elseif ( strpos( $siteurl, 'identi.ca') !== FALSE ) {
         return array('type' => 'identica', 'name' => 'identica');
     }
-    elseif( strpos( $siteurl, 'shaarli' ) !== FALSE ) { 
+    elseif( strpos( $siteurl, 'shaarli' ) !== FALSE ) {
         return array('type' => 'shaarli', 'name' => 'shaarli');
     }
     else
@@ -157,6 +174,24 @@ function debug($data)
 	var_dump($data);
 	echo '</pre>';
 }
+
+/**
+   * Améliore la sortie print
+   *
+   * @author Tatane http://www.tatane.info/index.php/print_rn
+   * @author http://www.blog.cactuscrew.com/77-print_rn.html
+   * @param $data (array) tableau à examiner
+   * @param $name (string) nom a affiché
+   * @return false affiche les clef valeur du tableau $data
+   */
+  function n_print($data, $name = '') {
+    $aBackTrace = debug_backtrace();
+    echo '<h2>', $name, '</h2>';
+    echo '<fieldset style="border: 1px solid orange; padding: 5px;color: #333; background-color: #fff;">';
+    echo '<legend style="border:1px solid orange;padding: 1px;background-color:#eee;color:orange;">', basename($aBackTrace[0]['file']), ' ligne => ', $aBackTrace[0]['line'], '</legend>';
+    echo '<pre>', htmlentities(print_r($data, 1)), '</pre>';
+    echo '</fieldset><br />';
+  }
 
 function __($str)
 {

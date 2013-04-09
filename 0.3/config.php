@@ -46,12 +46,12 @@ $head_title = "";
 /* And now, the XSAF links to be imported, with maximal execusion time for import in second !
 You should add only trusted sources. */
 $autoblog_farm = array(
-    'https://raw.github.com/mitsukarenai/xsaf-bootstrap/master/3.json' /*,
+   'https://raw.github.com/mitsukarenai/xsaf-bootstrap/master/3.json' ,
     'https://www.ecirtam.net/autoblogs/?export',
-    'https://autoblog.suumitsu.eu/?export', */
+    'http://autoblog.suumitsu.eu/?export'
 );
 
 // personnal option
-$myOptions['enableThumbShot'] = false;
+$myOptions['enableThumbShot'] = true;
 $myOptions['externalThumbSdhot'] = '';
 ?>

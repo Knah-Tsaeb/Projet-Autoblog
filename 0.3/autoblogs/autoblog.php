@@ -145,6 +145,7 @@ class VroumVroum_Config
     public $site_type = '';
     public $site_title = '';
     public $site_description = '';
+    public $site_meta_description = '';
     public $site_url = '';
     public $feed_url = '';
     public $articles_per_page = 10;
@@ -651,7 +652,7 @@ if (!$search && !empty($_SERVER['QUERY_STRING']) && !is_numeric($_SERVER['QUERY_
 $css='    * { margin: 0; padding: 0; }
     body { font-family:sans-serif; background-color: #efefef; padding: 1%; color: #333; }
     img { max-width: 100%; height: auto; }
-	a { text-decoration: none; color: #000;font-weight:bold; } 
+	a { text-decoration: none; color: #000;font-weight:bold; }
    .header a { text-decoration: none; color: #000;font-weight:bold; }
     .header { text-align:center; padding: 30px 3%; max-width:70em;margin:0 auto; }
 	.article .title { margin-bottom: 1em; }
@@ -726,9 +727,10 @@ echo '
     <hr>
     <h1><a href="./">'.escape($config->site_title).'</a></h1>';
 
-if (!empty($config->site_description))
+if (!empty($config->site_description)){
     echo '<p>'.$config->site_description.'<br><a href="../../">&lArr; retour index</a></p>';
-
+}
+    echo '<p class="pagination">'.$config->site_meta_description.'<br></p>';
 echo '
     <form method="get" action="'.escape(LOCAL_URL).'" class="searchForm">
     <div>
