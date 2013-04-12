@@ -1,6 +1,41 @@
 <?php
 
+/**
+ * DO NOT EDIT THESE LINES
+ * You can override these options by setting them in config.php
+ **/
+if(!defined('ROOT_DIR'))
+{
+    define('ROOT_DIR', dirname($_SERVER['SCRIPT_FILENAME']));
+}
+define('LOCAL_URI', '');
+if (!defined('AUTOBLOGS_FOLDER')) define('AUTOBLOGS_FOLDER', './autoblogs/');
+if (!defined('DOC_FOLDER')) define('DOC_FOLDER', './docs/');
+if (!defined('RESOURCES_FOLDER')) define('RESOURCES_FOLDER', './resources/');
+if (!defined('RSS_FILE')) define('RSS_FILE', RESOURCES_FOLDER.'rss.xml');
+date_default_timezone_set('Europe/Paris');
+setlocale(LC_TIME, 'fr_FR.UTF-8', 'fr_FR', 'fr');
 
+if( !defined('ALLOW_FULL_UPDATE')) define( 'ALLOW_FULL_UPDATE', TRUE );
+if( !defined('ALLOW_CHECK_UPDATE')) define( 'ALLOW_CHECK_UPDATE', TRUE );
+
+// If you set ALLOW_NEW_AUTOBLOGS to FALSE, the following options do not matter.
+if( !defined('ALLOW_NEW_AUTOBLOGS')) define( 'ALLOW_NEW_AUTOBLOGS', TRUE );
+if( !defined('ALLOW_NEW_AUTOBLOGS_BY_LINKS')) define( 'ALLOW_NEW_AUTOBLOGS_BY_LINKS', TRUE );
+if( !defined('ALLOW_NEW_AUTOBLOGS_BY_SOCIAL')) define( 'ALLOW_NEW_AUTOBLOGS_BY_SOCIAL', TRUE );
+if( !defined('ALLOW_NEW_AUTOBLOGS_BY_BUTTON')) define( 'ALLOW_NEW_AUTOBLOGS_BY_BUTTON', TRUE );
+if( !defined('ALLOW_NEW_AUTOBLOGS_BY_OPML_FILE')) define( 'ALLOW_NEW_AUTOBLOGS_BY_OPML_FILE', TRUE );
+if( !defined('ALLOW_NEW_AUTOBLOGS_BY_OPML_LINK')) define( 'ALLOW_NEW_AUTOBLOGS_BY_OPML_LINK', TRUE );
+if( !defined('ALLOW_NEW_AUTOBLOGS_BY_XSAF')) define( 'ALLOW_NEW_AUTOBLOGS_BY_XSAF', TRUE );
+
+// More about TwitterBridge : https://github.com/mitsukarenai/twitterbridge
+if( !defined('API_TWITTER')) define( 'API_TWITTER', FALSE );
+
+if( !defined('LOGO')) define( 'LOGO', 'icon-logo.svg' );
+if( !defined('HEAD_TITLE')) define( 'HEAD_TITLE', '');
+if( !defined('FOOTER')) define( 'FOOTER', 'D\'après les premières versions de <a href="http://sebsauvage.net">SebSauvage</a> et <a href="http://bohwaz.net/">Bohwaz</a>.');
+
+// Functions
 function NoProtocolSiteURL($url) {
 	$protocols = array("http://", "https://");
 	$siteurlnoproto = str_replace($protocols, "", $url);
@@ -47,7 +82,7 @@ function urlToFolderSlash($url) {
 }
 
 function folderExists($url) {
-	return file_exists(urlToFolder($url)) || file_exists(urlToFolderSlash($url));
+	return file_exists(AUTOBLOGS_FOLDER . urlToFolder($url)) || file_exists(AUTOBLOGS_FOLDER . urlToFolderSlash($url));
 }
 
 function escape($str) {
@@ -92,9 +127,14 @@ function createAutoblog($type, $sitename, $siteurl, $rssurl, $siteDesc, $error =
         /**
          * RSS
          **/
-        require_once('class_rssfeed.php');
-        $rss = new AutoblogRSS(RSS_FILE);
-        $rss->addNewAutoblog($sitename, $foldername, $siteurl, $rssurl);
+        try {
+            require_once('class_rssfeed.php');
+            $rss = new AutoblogRSS(RSS_FILE);
+            $rss->addNewAutoblog($sitename, $foldername, $siteurl, $rssurl);
+        }
+        catch (Exception $e) {
+            ;
+        }
 
         $fp = fopen($foldername .'/index.php', 'w+');
         if( !fwrite($fp, "<?php require_once '../autoblog.php'; ?>") )

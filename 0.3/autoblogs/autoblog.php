@@ -24,7 +24,7 @@ libxml_disable_entity_loader(true);
 if (file_exists(__DIR__ . '/../config.php')) {
     require_once __DIR__ . '/../config.php';
 }
-else die("Configuration file not found.");
+//else die("Configuration file not found.");
 
 if (file_exists(__DIR__ . '/../functions.php')){
     require_once __DIR__ . '/../functions.php';
@@ -723,7 +723,7 @@ echo '
 </head>
 <body>
 <div class="header">
-    <h1><a href="../../" style="font-size:0.8em;">PROJET AUTOBLOG'. (!empty($head_title) ? ' ~ '. escape($head_title) : '') .'</a></h1>
+    <h1><a href="../../" style="font-size:0.8em;">PROJET AUTOBLOG'. (strlen(HEAD_TITLE) > 0 ? ' ~ '. HEAD_TITLE : '') .'</a></h1>
     <hr>
     <h1><a href="./">'.escape($config->site_title).'</a></h1>';
 

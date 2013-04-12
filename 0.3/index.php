@@ -21,21 +21,20 @@
 define('XSAF_VERSION', 3);
 define('ROOT_DIR', __DIR__);
 
+$error = array();
+$success = array();
+
 if(file_exists("config.php")){
-    include "config.php";
+    require_once "config.php";
 }else{
-    echo "config.php not found !";
-    die;
+    $error[] = "config.php not found !";
 }
 if(file_exists("functions.php")){
-    include "functions.php";
+    require_once "functions.php";
 }else{
     echo "functions.php not found !";
     die;
 }
-
-$error = array();
-$success = array();
 
 function get_title_from_feed($url) {
     return get_title_from_datafeed(file_get_contents($url));
@@ -120,7 +119,7 @@ function create_from_opml($opml) {
                 $error = array_merge( $error, createAutoblog( $sitetype, $sitename, $siteurl, $rssurl, $siteDesc, $error ) );
 
                 if( empty ( $error ))
-                    $success[] = '<iframe width="1" height="1" frameborder="0" src="'. urlToFolderSlash( $siteurl ) .'/index.php"></iframe>Autoblog "'. $sitename .'" crée avec succès. &rarr; <a target="_blank" href="'. urlToFolderSlash( $siteurl ) .'">afficher l\'autoblog</a>.';
+                    $success[] = '<iframe width="1" height="1" frameborder="0" src="'. AUTOBLOGS_FOLDER . urlToFolderSlash( $siteurl ) .'/index.php"></iframe>Autoblog "'. $sitename .'" crée avec succès. &rarr; <a target="_blank" href="'. urlToFolderSlash( $siteurl ) .'">afficher l\'autoblog</a>.';
             }
             catch (Exception $e) {
                 $error[] = $e->getMessage();
@@ -166,7 +165,7 @@ function versionCheck() {
 if( !file_exists(RSS_FILE)) {
     require_once('class_rssfeed.php');
     $rss = new AutoblogRSS(RSS_FILE);
-    $rss->create('Projet Autoblog'. ((!empty($head_title)) ? ' | '. $head_title : ''), serverUrl(true),"Projet Autoblog - RSS : Ajouts et changements de disponibilité.", serverUrl(true) . RSS_FILE);
+    $rss->create('Projet Autoblog'. ((strlen(HEAD_TITLE)>0) ? ' | '. HEAD_TITLE : ''), serverUrl(true),"Projet Autoblog - RSS : Ajouts et changements de disponibilité.", serverUrl(true) . RSS_FILE);
 }
 if (isset($_GET['rss'])) {
     require_once('class_rssfeed.php');
@@ -350,15 +349,15 @@ if (isset($_GET['exportopml'])) // OPML
 if (isset($_GET['sitemap']))
 {
     header('Content-Type: application/xml');
+	$proto=(!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS'])=='on')?"https://":"http://";
     echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
-			echo '<url><loc>'.'http' . (!empty($_SERVER['HTTPS']) ? 's' : '')."://{$_SERVER['HTTP_HOST']}".str_replace('?sitemap', '', $_SERVER['REQUEST_URI'])."</loc>\n";
+			echo '<url><loc>'.$proto."{$_SERVER['HTTP_HOST']}".str_replace('?sitemap', '', $_SERVER['REQUEST_URI'])."</loc>\n";
             echo '<lastmod>'.date('c', time())."</lastmod>\n";
             echo '<changefreq>daily</changefreq></url>';
     $subdirs = glob(AUTOBLOGS_FOLDER . "*");
     foreach($subdirs as $unit) {
         if(is_dir($unit)) {
             $unit=substr($unit, 2);
-            $proto=(!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS'])=='on')?"https://":"http://";
             echo '<url><loc>'.$proto.$_SERVER['SERVER_NAME'].substr($_SERVER['PHP_SELF'], 0, -9)."$unit/"."</loc>\n";
             echo '<lastmod>'.date('c', filemtime($unit))."</lastmod>\n";
             echo '<changefreq>hourly</changefreq></url>';
@@ -431,8 +430,8 @@ if(!empty($_GET['via_button']) && $_GET['number'] === '17' && ALLOW_NEW_AUTOBLOG
 
                 $error = array_merge( $error, createAutoblog($sitetype, $sitename, $siteurl, $rssurl, $siteDesc, $error));
                 if( empty($error)) {
-                    $form .= '<iframe width="1" height="1" frameborder="0" src="'. urlToFolderSlash($siteurl) .'/index.php"></iframe>';
-                    $form .= '<p><span style="color:darkgreen">Autoblog <a href="'. urlToFolderSlash($siteurl) .'">'. $sitename .'</a> ajouté avec succès.</span><br>';
+                    $form .= '<iframe width="1" height="1" frameborder="0" src="'. AUTOBLOGS_FOLDER . urlToFolderSlash($siteurl) .'/index.php"></iframe>';
+                    $form .= '<p><span style="color:darkgreen">Autoblog <a href="'. AUTOBLOGS_FOLDER . urlToFolderSlash($siteurl) .'">'. $sitename .'</a> ajouté avec succès.</span><br>';
                 }
                 else {
                     $form .= '<ul>';
@@ -491,10 +490,10 @@ if(!empty($_POST['socialaccount']) && !empty($_POST['socialinstance']) && ALLOW_
         $socialinstance = strtolower(escape($_POST['socialinstance']));
 
         if($socialinstance === 'twitter') {
-            if( $apitwitter !== FALSE ) {
+            if( API_TWITTER !== FALSE ) {
                 $sitetype = 'twitter';
                 $siteurl = "http://twitter.com/$socialaccount";
-                $rssurl = $apitwitter.$socialaccount;
+                $rssurl = API_TWITTER.$socialaccount;
             }
             else
                 $error[] = "Twitter veut mettre à mort son API ouverte. Du coup on peut plus faire ça comme ça.";
@@ -539,7 +538,7 @@ if(!empty($_POST['socialaccount']) && !empty($_POST['socialinstance']) && ALLOW_
             if( empty($error) ) {
                 $error = array_merge( $error, createAutoblog($sitetype, ucfirst($socialinstance) .' - '. $socialaccount, $siteurl, $rssurl,$siteDesc, $error));
                 if( empty($error))
-                    $success[] = '<iframe width="1" height="1" frameborder="0" src="'. urlToFolderSlash( $siteurl ) .'/index.php"></iframe><b style="color:darkgreen">'.ucfirst($socialinstance) .' - '. $socialaccount.' <a href="'.urlToFolderSlash( $siteurl ).'">ajouté avec succès</a>.</b>';
+                    $success[] = '<iframe width="1" height="1" frameborder="0" src="'. AUTOBLOGS_FOLDER . urlToFolderSlash( $siteurl ) .'/index.php"></iframe><b style="color:darkgreen">'.ucfirst($socialinstance) .' - '. $socialaccount.' <a href="'.urlToFolderSlash( $siteurl ).'">ajouté avec succès</a>.</b>';
             }
         }
     }
@@ -571,7 +570,7 @@ if( !empty($_POST['generic']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY_L
                 $error = array_merge( $error, createAutoblog('generic', $sitename, $siteurl, $rssurl, $siteDesc, $error));
 
                 if( empty($error))
-                    $success[] = '<iframe width="1" height="1" frameborder="0" src="'. urlToFolderSlash( $siteurl ) .'/index.php"></iframe><b style="color:darkgreen">Autoblog '. $sitename .' crée avec succès.</b> &rarr; <a target="_blank" href="'. AUTOBLOGS_FOLDER . urlToFolderSlash( $siteurl ) .'">afficher l\'autoblog</a>';
+                    $success[] = '<iframe width="1" height="1" frameborder="0" src="'. AUTOBLOGS_FOLDER . urlToFolderSlash( $siteurl ) .'/index.php"></iframe><b style="color:darkgreen">Autoblog '. $sitename .' crée avec succès.</b> &rarr; <a target="_blank" href="'. AUTOBLOGS_FOLDER . urlToFolderSlash( $siteurl ) .'">afficher l\'autoblog</a>';
             }
             else {
                 // checking procedure
@@ -658,7 +657,7 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
 <html lang="en" dir="ltr">
     <head>
     <meta charset="utf-8">
-    <title>Projet Autoblog<?php if(!empty($head_title)) { echo " | " . escape($head_title); } ?></title>
+    <title>Projet Autoblog<?php if(strlen(HEAD_TITLE)>0) echo " | " . HEAD_TITLE; ?></title>
     <link rel="alternate" type="application/rss+xml" title="RSS" href="<?php echo serverUrl(true) . RSS_FILE;?>" />
     <link href="<?php echo RESOURCES_FOLDER; ?>autoblog.css" rel="stylesheet" type="text/css">
     <?php
@@ -668,11 +667,16 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
     ?>
     </head>
     <body>
-        <h1><a href="<?php echo serverUrl(true); ?>">PROJET AUTOBLOG<?php if(!empty($head_title)) { echo " | " . escape($head_title); } ?></a></h1>
+        <h1><a href="<?php echo serverUrl(true); ?>">
+            PROJET AUTOBLOG
+            <?php if(strlen(HEAD_TITLE)>0) echo " | " . HEAD_TITLE; ?>
+        </a></h1>
 
         <div class="pbloc">
-            <img id="logo" src="<?php if(isset($logo)) { echo $logo; }else{ echo RESOURCES_FOLDER.'icon-logo.svg'; } ?>" alt="">
-
+        <?php
+            if (defined('LOGO'))
+                echo '<img id="logo" src="'. RESOURCES_FOLDER . LOGO .'" alt="">';
+        ?>
             <h2>Présentation</h2>
 
             <p>
@@ -750,7 +754,7 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
                         <form method="POST">
                             <input placeholder="Identifiant du compte" type="text" name="socialaccount" id="socialaccount"><br>
                             <?php
-                            if( $apitwitter !== FALSE )
+                            if( API_TWITTER !== FALSE )
                                 echo '<input type="radio" name="socialinstance" value="twitter">Twitter<br>';
                             else echo '<s>Twitter</s><br>'; ?>
                             <input type="radio" name="socialinstance" value="identica">Identica<br>
@@ -900,7 +904,7 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
             <?php echo "<p>".count($autoblogs)." autoblogs hébergés</p>"; ?>
         </div>
         Propulsé par <a href="https://github.com/mitsukarenai/Projet-Autoblog">Projet Autoblog 0.3</a> de <a href="https://www.suumitsu.eu/">Mitsu</a>, <a href="https://www.ecirtam.net/">Oros</a> et <a href="http://hoa.ro">Arthur Hoaro</a> (Domaine Public)
-        <?php if(isset($HTML_footer)){ echo "<br/>".$HTML_footer; } ?>
+        <?php if(defined('FOOTER') && strlen(FOOTER)>0 ){ echo "<br/>".FOOTER; } ?>
         <iframe width="1" height="1" style="display:none" src="xsaf3.php"></iframe>
 
         <script type="text/javascript">

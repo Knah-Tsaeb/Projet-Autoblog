@@ -7,13 +7,17 @@ h1 {
   margin: 0.5em;
 }
 
+#logo {
+ height: 145px;
+}
+
 .pbloc, .button, .vignette, .thumbshot img {
-  border-radius: 0.3em;
+  border-radius: 0.2em;
 }
 
 .pbloc {
   max-width: 100%;
-  padding: 0.3em;
+  padding: 0.4em;
   margin: 1.2em 0.3em;
 }
 
