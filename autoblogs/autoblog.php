@@ -1,22 +1,16 @@
 <?php
 /*
-    VroumVroumBlog 0.2.11
+    VroumVroumBlog 0.3.0
     This blog automatically publishes articles from an external RSS 2.0 or ATOM feed.
-
-    Installation:
-    - copy this script (index.php) to a directory on your webserver.
-    - optionnaly copy the database ('articles.db'). Otherwise, it will be created automatically.
-    - tweak setting in vvb.ini
 
     Requirement for the source RSS feed:
     - Source feed MUST be a valid RSS 2.0, RDF 1.0 or ATOM 1.0 feed.
     - Source feed MUST be valid UTF-8
     - Source feed MUST contain article body
-    - Only media from the hosts declared in DOWNLOAD_MEDIA_FROM= in vbb.ini will be downloaded.
 
     This program is public domain. COPY COPY COPY !
 */
-
+$vvbversion = '0.3.0';
 if (!version_compare(phpversion(), '5.3.0', '>='))
     die("This software requires PHP version 5.3.0 at least, yours is ".phpversion());
 
@@ -27,26 +21,27 @@ libxml_disable_entity_loader(true);
 
 // Config and data file locations
 
-if (file_exists(__DIR__ . '/config.php'))
-{
-    require_once __DIR__ . '/config.php';
+if (file_exists(__DIR__ . '/../config.php')) {
+    require_once __DIR__ . '/../config.php';
 }
+//else die("Configuration file not found.");
+
+if (file_exists(__DIR__ . '/../functions.php')){
+    require_once __DIR__ . '/../functions.php';
+}
+else die("Functions file not found.");
 
 if (!defined('ROOT_DIR'))
     define('ROOT_DIR', __DIR__);
 
 if (!defined('CONFIG_FILE'))        define('CONFIG_FILE', ROOT_DIR . '/vvb.ini');
 if (!defined('ARTICLES_DB_FILE'))   define('ARTICLES_DB_FILE', ROOT_DIR . '/articles.db');
-if (!defined('LOCAL_DB_FILE'))      define('LOCAL_DB_FILE', ROOT_DIR . '/local.db');
 if (!defined('MEDIA_DIR'))          define('MEDIA_DIR', ROOT_DIR . '/media');
 
 if (!defined('LOCAL_URL'))
 {
     // Automagic URL discover
-    $path = substr(ROOT_DIR, strlen($_SERVER['DOCUMENT_ROOT']));
-    $path = (!empty($path[0]) && $path[0] != '/') ? '/' . $path : $path;
-    $path = (substr($path, -1) != '/') ? $path . '/' : $path;
-    define('LOCAL_URL', 'http' . (!empty($_SERVER['HTTPS']) ? 's' : '') . '://' . $_SERVER['HTTP_HOST'] . $path);
+    define('LOCAL_URL', 'http' . (!empty($_SERVER['HTTPS']) ? 's' : '')."://{$_SERVER['HTTP_HOST']}{$_SERVER['REQUEST_URI']}");
 }
 
 if (!defined('LOCAL_URI'))
@@ -147,12 +142,12 @@ set_exception_handler("exception_handler");
 
 class VroumVroum_Config
 {
+    public $site_type = '';
     public $site_title = '';
     public $site_description = '';
+    public $site_meta_description = '';
     public $site_url = '';
     public $feed_url = '';
-    public $download_media_from = null;
-    public $download_media_types = 'jpg,jpeg,png,gif,pdf';
     public $articles_per_page = 10;
     public $update_interval = 3600;
     public $update_timeout = 10;
@@ -180,18 +175,13 @@ class VroumVroum_Config
         }
 
         // Check that all required values are filled
-        $check = array('site_title', 'site_url', 'feed_url', 'update_timeout', 'update_interval', 'articles_per_page');
+        $check = array('site_type', 'site_title', 'site_url', 'feed_url', 'update_timeout', 'update_interval', 'articles_per_page');
         foreach ($check as $c)
         {
             if (!trim($this->$c))
                 throw new VroumVroum_User_Exception("Missing or empty configuration value '".$c."' which is required!");
         }
 
-        // Default value
-        if (is_null($this->download_media_from))
-        {
-            $this->download_media_from = preg_replace('!^https?://([^/]+).*$!', '\\1', $this->site_url);
-        }
     }
 
     public function __set($key, $value)
@@ -204,8 +194,6 @@ class VroumVroum_Config
 
 class VroumVroum_Blog
 {
-    const VERSION = '0.2.11';
-
     protected $articles = null;
     protected $local = null;
 
@@ -233,10 +221,8 @@ class VroumVroum_Blog
         $this->config = new VroumVroum_Config;
 
         $create_articles_db = file_exists(ARTICLES_DB_FILE) ? false : true;
-        $create_local_db = file_exists(LOCAL_DB_FILE) ? false : true;
 
         $this->articles = new SQLite3(ARTICLES_DB_FILE);
-        $this->local = new SQLite3(LOCAL_DB_FILE);
 
         if ($create_articles_db)
         {
@@ -250,42 +236,31 @@ class VroumVroum_Blog
                     date INT,
                     content TEXT
                 );
+                CREATE TABLE update_log (
+                    date INT PRIMARY KEY,
+                    success INT,
+                    log TEXT
+                );
                 CREATE UNIQUE INDEX feed_id ON articles (feed_id);
                 CREATE INDEX date ON articles (date);
                 ');
         }
 
-        if ($create_local_db)
-        {
-            $this->local->exec('
-                CREATE VIRTUAL TABLE search USING fts3 (
-                    id INT PRIMARY KEY,
-                    title TEXT,
-                    content TEXT
-                );
-
-                CREATE TABLE update_log (
-                    date INT PRIMARY KEY,
-                    success INT,
-                    log TEXT
-                );');
-        }
-
-        $this->local->createFunction('countintegers', array($this, 'sql_countintegers'));
+        $this->articles->createFunction('countintegers', array($this, 'sql_countintegers'));
     }
 
     public function getLocalURL($in)
     {
-        return LOCAL_URL . LOCAL_URI . (is_array($in) ? $in['uri'] : $in);
+        return "./?".(is_array($in) ? $in['uri'] : $in);
     }
 
     protected function log_update($success, $log = '')
     {
-        $this->local->exec('INSERT INTO update_log (date, success, log) VALUES (\''.time().'\', \''.(int)(bool)$success.'\',
+        $this->articles->exec('INSERT INTO update_log (date, success, log) VALUES (\''.time().'\', \''.(int)(bool)$success.'\',
             \''.$this->articles->escapeString($log).'\');');
 
         // Delete old log
-        $this->local->exec('DELETE FROM update_log WHERE date > (SELECT date FROM update_log ORDER BY date DESC LIMIT 100,1);');
+        $this->articles->exec('DELETE FROM update_log WHERE date > (SELECT date FROM update_log ORDER BY date DESC LIMIT 100,1);');
 
         return true;
     }
@@ -303,7 +278,6 @@ class VroumVroum_Blog
                 $uri = date('Y-m-d-') . $uri;
             }
 
-            if (!empty($this->config->download_media_from) && !empty($this->config->download_media_types))
                 $content = $this->mirrorMediasForArticle($content, $url);
 
             $this->articles->exec('INSERT INTO articles (id, feed_id, title, uri, url, date, content) VALUES (NULL,
@@ -316,8 +290,6 @@ class VroumVroum_Blog
             $title = self::removeHTML($title);
             $content = self::removeHTML($content);
 
-            $this->local->exec('INSERT INTO search (id, title, content) VALUES (\''.(int)$id.'\',
-                \''.$this->local->escapeString($title).'\', \''.$this->local->escapeString($content).'\');');
         }
         else
         {
@@ -329,7 +301,7 @@ class VroumVroum_Blog
 
             $id = $exists['id'];
 
-            if ($content != $exists['content'] && !empty($this->config->download_media_from) && !empty($this->config->download_media_types))
+            if ($content != $exists['content'])
                 $content = $this->mirrorMediasForArticle($content, $url);
 
             $this->articles->exec('UPDATE articles SET title=\''.$this->articles->escapeString($title).'\',
@@ -339,8 +311,6 @@ class VroumVroum_Blog
             $title = self::removeHTML($title);
             $content = self::removeHTML($content);
 
-            $this->local->exec('UPDATE search SET title=\''.$this->local->escapeString($title).'\',
-                content=\''.$this->local->escapeString($content).'\' WHERE id = \''.(int)$id.'\';');
         }
 
         return $id;
@@ -351,7 +321,7 @@ class VroumVroum_Blog
         if (isset($_GET['update']))
             return true;
 
-        $last_update = $this->local->querySingle('SELECT date FROM update_log ORDER BY date DESC LIMIT 1;');
+        $last_update = $this->articles->querySingle('SELECT date FROM update_log ORDER BY date DESC LIMIT 1;');
 
         if (!empty($last_update) && (int) $last_update > (time() - $this->config->update_interval))
             return false;
@@ -366,7 +336,7 @@ class VroumVroum_Blog
                 'http'  =>  array(
                     'method'    =>  'GET',
                     'timeout'   =>  $this->config->update_timeout,
-                    'header'    =>  "User-Agent: Opera/9.80 (X11; Linux i686; U; fr) Presto/2.2.15 Version/10.10\r\n",
+                    'header'    =>  "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:20.0; Autoblogs; +https://github.com/mitsukarenai/Projet-Autoblog/) Gecko/20100101 Firefox/20.0\r\n",
                 )
             )
         );
@@ -397,7 +367,6 @@ class VroumVroum_Blog
         }
 
         $updated = 0;
-        $this->local->exec('BEGIN TRANSACTION;');
         $this->articles->exec('BEGIN TRANSACTION;');
 
         if (isset($xml->entry)) // ATOM feed
@@ -453,7 +422,6 @@ class VroumVroum_Blog
         $this->log_update(true, $updated . " elements updated");
 
         $this->articles->exec('END TRANSACTION;');
-        $this->local->exec('END TRANSACTION;');
 
         return $updated;
     }
@@ -496,10 +464,10 @@ class VroumVroum_Blog
 
     public function searchArticles($query)
     {
-        $res = $this->local->query('SELECT id, title, snippet(search, "<b>", "</b>", "...", -1, -40) AS snippet
-            FROM search
-            WHERE search MATCH \''.$this->local->escapeString($query).'\'
-            ORDER BY countintegers(offsets(search)) DESC
+        $res = $this->articles->query('SELECT id, uri, title, content
+            FROM articles
+            WHERE content LIKE \'%'.$this->articles->escapeString($query).'%\'
+            ORDER BY id DESC
             LIMIT 0,100;');
 
         $out = array();
@@ -520,23 +488,22 @@ class VroumVroum_Blog
             mkdir(MEDIA_DIR);
         }
 
-        $extensions = explode(',', preg_quote($this->config->download_media_types, '!'));
+        $schemes = array('http', 'https');
+		$extensions = explode(',', preg_quote('jpg,jpeg,png,apng,gif,svg,pdf,odt,ods,epub,webp,wav,mp3,ogg,aac,wma,flac,opus,mp4,webm', '!'));
         $extensions = implode('|', $extensions);
 
-        $hosts = explode(',', preg_quote($this->config->download_media_from, '!'));
-        $hosts = implode('|', $hosts);
-        $hosts = str_replace('\\*', '.*', $hosts);
-
-        $schemes = array('http', 'https');
-
         $from = parse_url($url);
-        $from['path'] = preg_replace('![^/]*$!', '', $from['path']);
+        if( isset($from['path']) ) { // not exist if http://exemple.com
+            $from['path'] = preg_replace('![^/]*$!', '', $from['path']);
+        }else{
+            $from['path'] = '';
+        }
 
-        preg_match_all('!(src|href)\s*=\s*[\'"]?([^"\'<>\s]+\.(?:'.$extensions.'))[\'"]?!i', $content, $match, PREG_SET_ORDER);
+        preg_match_all('!(src|href)\s*=\s*[\'"]?([^"\'<>\s]+\.(?:'.$extensions.')[\'"])[\'"]?!i', $content, $match, PREG_SET_ORDER);
 
         foreach ($match as $m)
         {
-            $url = parse_url($m[2]);
+            $url = parse_url(substr($m[2], 0, -1));
 
             if (empty($url['scheme']))
                 $url['scheme'] = $from['scheme'];
@@ -545,9 +512,6 @@ class VroumVroum_Blog
                 $url['host'] = $from['host'];
 
             if (!in_array(strtolower($url['scheme']), $schemes))
-                continue;
-
-            if (!preg_match('!^(?:'.$hosts.')$!i', $url['host']))
                 continue;
 
             if ($url['path'][0] != '/')
@@ -569,17 +533,8 @@ class VroumVroum_Blog
                     // Ignore copy errors
                 }
             }
-
-            if ($copied)
-            {
-                $content = str_replace($m[0], $m[1] . '="media/'.$filename.'" data-original-source="'.$url.'"', $content);
-            }
-            else
-            {
-                $content = str_replace($m[0], $m[1] . '="'.$url.'"', $content);
-            }
+                $content = str_replace($m[0], $m[1] . '="'.'media/'.$filename.'" data-original-source="'.$url.'"', $content);
         }
-
         return $content;
     }
 
@@ -599,39 +554,77 @@ class VroumVroum_Blog
 
 $vvb = new VroumVroum_Blog;
 $config = $vvb->config;
+$site_type = escape($config->site_type);
 
 if (isset($_GET['feed'])) // FEED
 {
-    header('Content-Type: application/xhtml+xml; charset=utf-8');
+    header('Content-Type: application/atom+xml; charset=UTF-8');
     echo '<?xml version="1.0" encoding="UTF-8"?>
-    <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
-    <channel>
-        <title>'.escape($config->site_title).'</title>
-        <link>'.escape($config->site_url).'</link>
-        <description>'.escape(html_entity_decode(strip_tags($config->site_description), ENT_COMPAT, 'UTF-8')).'</description>
-        <language></language>
-        <copyright></copyright>';
+	<feed xmlns="http://www.w3.org/2005/Atom" xmlns:thr="http://purl.org/syndication/thread/1.0" xml:lang="fr-FR">
+        <title type="text">'.escape($config->site_title).'</title>
+        <subtitle type="text">'.escape(html_entity_decode(strip_tags($config->site_description), ENT_COMPAT, 'UTF-8')).'</subtitle>
+		<updated>'.date(DATE_ATOM, filemtime(ARTICLES_DB_FILE)).'</updated>
+        <link rel="alternate" type="text/html" href="'.str_replace('?feed./', '', LOCAL_URL).'" />
+		<id>'.LOCAL_URL.'</id>
+		<link rel="self" type="application/atom+xml" href="'.LOCAL_URL.'" />
+		<generator uri="https://github.com/mitsukarenai/Projet-Autoblog" version="3">Projet Autoblog</generator>';
 
     foreach($vvb->listLastArticles() as $art)
     {
         echo '
-            <item>
-                <title>'.escape($art['title']).'</title>
-                <guid>'.escape($art['feed_id']).'</guid>
-                <link>'.$vvb->getLocalURL($art).'</link>
-                <pubDate>'.date(DATE_RSS, $art['date']).'</pubDate>
-                <description>
-                    <![CDATA['.escape_content($art['content']).']]>
-                </description>
-                <content:encoded>
-                    <![CDATA['.escape_content($art['content']).']]>
-                </content:encoded>
-            </item>';
+            <entry>
+					<author>
+					<name>'.escape($config->site_title).'</name>
+					<uri>'.escape($config->site_url).'</uri>
+					</author>
+                <title type="html"><![CDATA['.escape($art['title']).']]></title>
+				<link rel="alternate" type="text/html" href="'.str_replace('?feed', '?', LOCAL_URL).urlencode(str_replace('./?', '', $vvb->getLocalURL($art))).'" />
+                <id>'.str_replace('?feed', '?', LOCAL_URL).urlencode(str_replace('./?', '', $vvb->getLocalURL($art))).'</id>
+                <updated>'.date(DATE_ATOM, $art['date']).'</updated>
+
+                <content type="html">
+                    <![CDATA[(<a href="'.escape($art['feed_id']).'">source</a>)<br />'.escape_content($art['content']).']]>
+                </content>
+            </entry>';
     }
 
     echo '
-    </channel>
-    </rss>';
+    </feed>';
+    exit;
+}
+
+if (isset($_GET['opml'])) // OPML
+{
+    //header('Content-Type: application/octet-stream');
+    header('Content-type: text/xml');
+	header('Content-Disposition: attachment; filename="'.escape($config->site_title).'.xml"');
+    $opmlfile = new SimpleXMLElement('<opml></opml>');
+    $opmlfile->addAttribute('version', '1.0');
+    $opmlhead = $opmlfile->addChild('head');
+    $opmlhead->addChild('title', escape($config->site_title));
+    $opmlhead->addChild('dateCreated', date('r', time()));
+    $opmlbody = $opmlfile->addChild('body');
+    $outline = $opmlbody->addChild('outline');
+    $outline->addAttribute('title', escape($config->site_title));
+    $outline->addAttribute('text', escape($config->site_type));
+    $outline->addAttribute('htmlUrl', escape($config->site_url));
+    $outline->addAttribute('xmlUrl', escape($config->feed_url));
+
+    echo $opmlfile->asXML();
+    exit;
+}
+
+if (isset($_GET['media'])) // MEDIA
+{
+    header('Content-Type: application/json');
+    if(is_dir(MEDIA_DIR))
+    {
+		$url = str_replace('?media', 'media/', LOCAL_URL);
+        $files = scandir(MEDIA_DIR);
+        unset($files[0]); // .
+        unset($files[1]); // ..
+        echo json_encode(array("url"=> $url, "files" => $files));
+    }
     exit;
 }
 
@@ -655,31 +648,94 @@ if (!$search && !empty($_SERVER['QUERY_STRING']) && !is_numeric($_SERVER['QUERY_
     }
 }
 
+//  common CSS
+$css='    * { margin: 0; padding: 0; }
+    body { font-family:sans-serif; background-color: #efefef; padding: 1%; color: #333; }
+    img { max-width: 100%; height: auto; }
+	a { text-decoration: none; color: #000;font-weight:bold; }
+   .header a { text-decoration: none; color: #000;font-weight:bold; }
+    .header { text-align:center; padding: 30px 3%; max-width:70em;margin:0 auto; }
+	.article .title { margin-bottom: 1em; }
+    .article .title h2 a:hover { color:#403976; }
+	.article h4 { font-weight: normal; font-size: small; color: #666; }
+	.article .source a { color: #666; }
+	.searchForm { float:right; }
+	.searchForm input { }
+    .pagination {  background-color:white;padding: 12px 10px 12px 10px;border:1px solid #aaa;max-width:70em;margin:1em auto;box-shadow:0px 5px 7px #aaa; }
+    .pagination b { font-size: 1.2em; color: #333; }
+    .pagination a { color:#000; margin: 0 0.5em; }
+    .pagination a:hover { color:#333; }
+    .footer a { color:#000; }
+    .footer a:hover { color:#333; }
+    .content ul, .content ol { margin-left: 2em; }
+    .content h1, .content h2, .content h3, .content h4, .content h5, .content h6,
+        .content ul, .content ol, .content p, .content object, .content div, .content blockquote,
+        .content dl, .content pre { margin-bottom: 0.8em; }
+    .content pre, .content blockquote { background: #ddd; border: 1px solid #999; padding: 0.2em; max-width: 100%; overflow: auto; }
+    .content h1 { font-size: 1.5em; }
+    .content h2 { font-size: 1.4em;color:#000; }
+    .result h3 a { color: darkblue; text-decoration: none; text-shadow: 1px 1px 1px #fff; }
+    #error { position: fixed; top: 0; left: 0; right: 0; padding: 1%; background: #fff; border-bottom: 2px solid red; color: darkred; }
+';
+
+if($site_type == 'generic') // custom CSS for generic
+	{
+    $css = $css.'.header h1 a { color: #333;font-size:40pt;text-shadow: #ccc 0px 5px 5px;text-transform:uppercase; }
+    .article .title h2 { margin: 0; color:#333; text-shadow: 1px 1px 1px #fff; }
+    .article .title h2 a { color:#000; text-decoration:none; }
+	.article .source { font-size: 0.8em; color: #666; }
+    .article { background-color:white;padding: 12px 10px 12px 10px;border:1px solid #aaa;max-width:70em;margin:1em auto;box-shadow:0px 5px 7px #aaa; }
+    .footer { text-align:center; font-size: small; color:#333; clear: both; }';
+    }
+	else if($site_type == 'microblog' || $site_type == 'twitter' || $site_type == 'identica') // custom CSS for microblog
+	{
+    $css = $css.'.header h1 a { color: #333;font-size:40pt;text-shadow: #ccc 0px 5px 5px; }
+    .article .title h2 { width: 10em;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;font-size: 0.7em;margin: 0; color:#333; text-shadow: 1px 1px 1px #fff; }
+    .article .title h2 a { color:#333; text-decoration:none; }
+    .article { background-color:white;padding: 12px 10px 12px 10px;border:1px solid #aaa;max-width:70em;margin:0 auto;box-shadow:0px 5px 7px #aaa; }
+    .article .source { font-size: 0.8em; color: #666; }
+    .footer { margin-top:1em;text-align:center; font-size: small; color:#333; clear: both; }
+	.content {font-size:0.9em;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}';
+	}
+	else if($site_type == 'shaarli') // custom CSS for shaarli
+	{
+    $css = $css.'.header h1 a { color: #333;font-size:40pt;text-shadow: #ccc 0px 5px 5px; }
+    .article .title h2 { margin: 0; color:#333; text-shadow: 1px 1px 1px #fff; }
+    .article .title h2 a { color:#000; text-decoration:none; }
+    .article { background-color:white;padding: 12px 10px 12px 10px;border:1px solid #aaa;max-width:70em;margin:1em auto;box-shadow:0px 5px 7px #aaa; }
+    .article .source { margin-top:1em;font-size: 0.8em; color: #666; }
+    .footer { text-align:center; font-size: small; color:#333; clear: both; }';
+	}
+
+
 // HTML HEADER
 echo '
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
 <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <title>'.escape($config->site_title).'</title>
-    <link rel="canonical" href="'.escape($config->site_url).'" />
-    <link rel="alternate" type="application/rss+xml" title="'.__('RSS Feed').'" href="?feed" />
+    <link rel="canonical" href="'.escape($config->site_url).'">
+    <link rel="alternate" type="application/atom+xml" title="'.__('ATOM Feed').'" href="?feed">
     <style type="text/css" media="screen,projection">
-    '.get_css().'
+    '.$css.'
     </style>
 </head>
 <body>
 <div class="header">
-    <h1><a href="'.escape(LOCAL_URL).'">'.escape($config->site_title).'</a></h1>';
+    <h1><a href="../../" style="font-size:0.8em;">PROJET AUTOBLOG'. (strlen(HEAD_TITLE) > 0 ? ' ~ '. HEAD_TITLE : '') .'</a></h1>
+    <hr>
+    <h1><a href="./">'.escape($config->site_title).'</a></h1>';
 
-if (!empty($config->site_description))
-    echo '<p>'.$config->site_description.'</p>';
-
+if (!empty($config->site_description)){
+    echo '<p>'.$config->site_description.'<br><a href="../../">&lArr; retour index</a></p>';
+}
+    echo '<p class="pagination">'.$config->site_meta_description.'<br></p>';
 echo '
     <form method="get" action="'.escape(LOCAL_URL).'" class="searchForm">
     <div>
-        <input type="text" name="q" value="'.escape($search).'" />
-        <input type="submit" value="'.__('Search').'" />
+        <input type="text" name="q" value="'.escape($search).'">
+        <input type="submit" value="'.__('Search').'">
     </div>
     </form>
 </div>
@@ -706,7 +762,7 @@ if (!empty($search))
     <div class="article">
         <div class="title">
             <h2>'.__('Search').'</h2>
-            <h4>'.$text.'</h4>
+            '.$text.'
         </div>
     </div>';
 
@@ -714,8 +770,8 @@ if (!empty($search))
     {
         echo '
         <div class="article result">
-            <h3><a href="'.escape($art['url']).'">'.escape($art['title']).'</a></h3>
-            <p>'.$art['snippet'].'</p>
+            <h3><a href="./?'.escape($art['uri']).'">'.escape($art['title']).'</a></h3>
+            <p>'.$art['content'].'</p>
         </div>';
     }
 }
@@ -728,7 +784,7 @@ elseif (!is_null($article))
             <div class="title">
                 <h2>'.__('Not Found').'</h2>
                 '.(!empty($uri) ? '<p><tt>'.escape($vvb->getLocalURL($uri)) . '</tt></p>' : '').'
-                <h4>'.__('Article not found.').'</h4>
+                '.__('Article not found.').'
             </div>
         </div>';
     }
@@ -774,9 +830,10 @@ else
 
 echo '
 <div class="footer">
-    <p>Powered by VroumVroumBlog '.VroumVroum_Blog::VERSION.' - <a href="?feed">'.__('RSS Feed').'</a></p>
-    <p>'.__('Download:').' <a href="'.LOCAL_URL.basename(CONFIG_FILE).'">'.__('configuration').'</a>
-        - <a href="'.LOCAL_URL.basename(ARTICLES_DB_FILE).'">'.__('articles').'</a></p>
+    <p>Propulsé par <a href="https://github.com/mitsukarenai/Projet-Autoblog">Projet Autoblog '.$vvbversion.'</a> - <a href="?feed">'.__('ATOM Feed').'</a></p>
+    <p>'.__('Download:').' <a href="./'.basename(CONFIG_FILE).'">'.__('configuration').'</a> (<a href="?opml">OPML</a>)
+        - <a href="./'.basename(ARTICLES_DB_FILE).'">'.__('articles').'</a><p/>
+    <p><a href="./?media">'.__('Media export').' <sup> JSON</sup></a></p>
 </div>';
 
 if ($vvb->mustUpdate())
@@ -826,16 +883,11 @@ echo '
 </body>
 </html>';
 
-// Escaping HTML strings
-function escape($str)
-{
-    return htmlspecialchars($str, ENT_COMPAT, 'UTF-8', false);
-}
 
 function escape_content($str)
 {
     $str = preg_replace('!<\s*(style|script|link)!', '&lt;\\1', $str);
-    $str = str_replace('="media/', '="'.LOCAL_URL.'media/', $str);
+    $str = str_replace('="media/', '="./media/', $str);
     return $str;
 }
 
@@ -847,51 +899,12 @@ function display_article($article)
     <div class="article">
         <div class="title">
             <h2><a href="'.$vvb->getLocalURL($article).'">'.escape($article['title']).'</a></h2>
-            <h4>'.strftime(__('_date_format'), $article['date']).'</h4>
+            '.strftime(__('_date_format'), $article['date']).'
         </div>
         <div class="content">'.escape_content($article['content']).'</div>
         <p class="source">'.__('Source:').' <a href="'.escape($article['url']).'">'.escape($article['url']).'</a></p>
         <br style="clear: both;" />
     </div>';
-}
-
-function get_css()
-{
-    return '
-    * { margin: 0; padding: 0; }
-    body { font-family:"Trebuchet MS",Verdana,Arial,Helvetica,sans-serif; background-color: #3E4B50; padding: 1%; color: #000; }
-    img { max-width: 100%; height: auto; }
-    .header h1 { text-shadow: 2px 2px 2px #000; }
-    .header h1 a { text-decoration: none; color: #eee; }
-    .header { padding: 1% 3%; color: #eee; margin: 0 10%; border-bottom: 1px solid #aaa; background: #6A6A6A; }
-    .header p a { color: #bbb; }
-    .header p a:hover { color:#FFFFC9; text-decoration:none;}
-    .article .title h2 { margin: 0; color:#666; text-shadow: 1px 1px 1px #fff; }
-    .article .title h2 a { color:#666; text-decoration:none; }
-    .article .title h2 a:hover { color:#403976; }
-    .pagination { margin: 0 10%;  padding: 1% 2%; background: #6A6A6A; }
-    .pagination b { font-size: 1.2em; color: #ffffc9; }
-    .pagination a { color:#ccc; margin: 0 0.5em; }
-    .pagination a:hover { color:#FFFFC9; }
-    .article { margin: 0 10%; padding: 1% 2%; background: #ccc; border-bottom: 1px solid #888; }
-    .article h4 { font-weight: normal; font-size: small; color: #666; }
-    .article .title { margin-bottom: 1em; }
-    .article .source { font-size: 0.8em; color: #666; }
-    .article .source a { color: #666; }
-    .searchForm { float:right; background: #6a6a6a; border: 1px solid #aaa; border-top: none; padding: 0 0.3em 0.3em; margin-top: 1.3%; }
-    .searchForm input { padding: 0.2em; border: 1px solid #999; background: #eee; color: #000; }
-    .footer { text-align:center; font-size: small; color:#aaa; clear: both; }
-    .footer a { color:#ccc; }
-    .footer a:hover { color:#FFFFC9; }
-    .content ul, .content ol { margin-left: 2em; }
-    .content h1, .content h2, .content h3, .content h4, .content h5, .content h6,
-        .content ul, .content ol, .content p, .content object, .content div, .content blockquote,
-        .content dl, .content pre { margin-bottom: 0.8em; }
-    .content pre, .content blockquote { background: #ddd; border: 1px solid #999; padding: 0.2em; max-width: 100%; overflow: auto; }
-    .content h1 { font-size: 1.5em; }
-    .content h2 { font-size: 1.4em; }
-    .result h3 a { color: darkblue; text-decoration: none; text-shadow: 1px 1px 1px #fff; }
-    #error { position: fixed; top: 0; left: 0; right: 0; padding: 1%; background: #fff; border-bottom: 2px solid red; color: darkred; }';
 }
 
 ?>

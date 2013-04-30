@@ -18,7 +18,7 @@ define( 'ALLOW_CHECK_UPDATE', TRUE );
 /**
  * If you set ALLOW_NEW_AUTOBLOGS to FALSE, the following options do not matter.
  **/
-define( 'ALLOW_NEW_AUTOBLOGS', FALSE );
+define( 'ALLOW_NEW_AUTOBLOGS', false );
 // define( 'ALLOW_NEW_AUTOBLOGS_BY_LINKS', TRUE );
 // define( 'ALLOW_NEW_AUTOBLOGS_BY_SOCIAL', TRUE );
 // define( 'ALLOW_NEW_AUTOBLOGS_BY_BUTTON', TRUE );
@@ -42,5 +42,5 @@ $friends_autoblog_farm = array(
 );
 
 $myOptions['enableThumbShot'] = true;
-$myOptions['externalThumbSdhot'] = 'http://soshot.local/?key=a2b860fcd656&&s=m&url=';
+$myOptions['externalThumbSdhot'] = 'http://soshot.knah-tsaeb.org/?key=3400affe9919&s=m&url=';
 ?>

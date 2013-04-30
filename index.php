@@ -105,21 +105,31 @@ function check_antibot($number, $text_number) {
 
 function create_from_opml($opml) {
     global $error, $success;
-
+    $cpt = 0;
     foreach( $opml->body->outline as $outline ) {
         if ( !empty( $outline['title'] ) && !empty( $outline['text'] ) && !empty( $outline['xmlUrl']) && !empty( $outline['htmlUrl'] )) {
             try {
-                $rssurl = DetectRedirect(escape( $outline['xmlUrl']));
-
                 $sitename = escape( $outline['title'] );
                 $siteurl = escape($outline['htmlUrl']);
-                $sitetype = escape($outline['text']); if ( $sitetype == 'generic' or $sitetype == 'microblog' or $sitetype == 'shaarli') { } else { $sitetype = 'generic'; }
+
+                // Lighten process by checking folderExists first
+                // A CHANGER SELON ISSUE #20
+                if(folderExists($siteurl))
+                    throw new Exception('Erreur : l\'autoblog '. $sitename .' existe déjà.');
+
+                $sitetype = escape($outline['text']);
+                if ( $sitetype != 'microblog' && $sitetype != 'shaarli' && $sitetype != 'twitter' && $sitetype != 'identica' )
+                    $sitetype = 'generic';
                 $siteDesc = getSiteDesc(escape($siteurl));
+                $rssurl = DetectRedirect(escape($outline['xmlUrl']));
 
-                $error = array_merge( $error, createAutoblog( $sitetype, $sitename, $siteurl, $rssurl, $siteDesc, $error ) );
+                createAutoblog( $sitetype, $sitename, $siteurl, $rssurl, $siteDesc, $error );
 
-                if( empty ( $error ))
-                    $success[] = '<iframe width="1" height="1" frameborder="0" src="'. AUTOBLOGS_FOLDER . urlToFolderSlash( $siteurl ) .'/index.php"></iframe>Autoblog "'. $sitename .'" crée avec succès. &rarr; <a target="_blank" href="'. urlToFolderSlash( $siteurl ) .'">afficher l\'autoblog</a>.';
+                $message = 'Autoblog "'. $sitename .'" crée avec succès. &rarr; <a target="_blank" href="'. urlToFolder( $siteurl, $rssurl ) .'">afficher l\'autoblog</a>.';
+                // Do not print iframe on big import (=> heavy and useless)
+                if( ++$cpt < 10 )
+                    $message .= '<iframe width="1" height="1" frameborder="0" src="'. urlToFolder( $siteurl, $rssurl ) .'/index.php"></iframe>';
+                $success[] = $message;
             }
             catch (Exception $e) {
                 $error[] = $e->getMessage();
@@ -133,7 +143,7 @@ function create_from_opml($opml) {
  **/
 function versionCheck() {
     $versionfile = 'version';
-    $lastestUrl = 'https://raw.github.com/mitsukarenai/Projet-Autoblog/master/0.3/version';
+    $lastestUrl = 'https://raw.github.com/mitsukarenai/Projet-Autoblog/master/version';
 
     $expire = time() - 84600 ; // 23h30 en secondes
     $lockfile = '.versionlock';
@@ -161,16 +171,14 @@ function versionCheck() {
 
 /**
 *   RSS Feed
+*
 **/
-if( !file_exists(RSS_FILE)) {
-    require_once('class_rssfeed.php');
-    $rss = new AutoblogRSS(RSS_FILE);
-    $rss->create('Projet Autoblog'. ((strlen(HEAD_TITLE)>0) ? ' | '. HEAD_TITLE : ''), serverUrl(true),"Projet Autoblog - RSS : Ajouts et changements de disponibilité.", serverUrl(true) . RSS_FILE);
+if( !file_exists(RESOURCES_FOLDER.'rss.json')) {
+	file_put_contents(RESOURCES_FOLDER.'rss.json', '', LOCK_EX);
 }
+
 if (isset($_GET['rss'])) {
-    require_once('class_rssfeed.php');
-    $rss = new AutoblogRSS(RSS_FILE);
-    $rss->displayXML();
+    displayXML();
     die;
 }
 
@@ -215,9 +223,7 @@ if (isset($_GET['check']))
         /* le flux est indisponible (typiquement: erreur DNS ou possible censure) - à vérifier */
         if(empty($headers) || $headers === FALSE ) {
             if( $oldvalue !== null && $oldvalue != '..' ) {
-                require_once('class_rssfeed.php');
-                $rss = new AutoblogRSS(RSS_FILE);
-                $rss->addUnavailable($ini['SITE_TITLE'], escape($_GET['check']), $ini['SITE_URL'], $ini['FEED_URL']);
+				updateXML('unavailable', 'nxdomain', escape($_GET['check']), $ini['SITE_TITLE'], $ini['SITE_URL'], $ini['FEED_URL']);
             }
             file_put_contents($errorlog, '..');
             die($svg_rouge);
@@ -226,9 +232,7 @@ if (isset($_GET['check']))
         /* code retour 200: flux disponible */
         if($code[1] == "200") {
             if( $oldvalue !== null && $oldvalue != '' ) {
-                require_once('class_rssfeed.php');
-                $rss = new AutoblogRSS(RSS_FILE);
-                $rss->addAvailable($ini['SITE_TITLE'], escape($_GET['check']), $ini['SITE_URL'], $ini['FEED_URL']);
+				updateXML('available', '200', escape($_GET['check']), $ini['SITE_TITLE'], $ini['SITE_URL'], $ini['FEED_URL']);
             }
             file_put_contents($errorlog, '');
             die($svg_vert);
@@ -236,9 +240,7 @@ if (isset($_GET['check']))
         /* autre code retour: un truc a changé (redirection, changement de CMS, .. bref vvb.ini doit être corrigé) */
         else {
             if( $oldvalue !== null && $oldvalue != '.' ) {
-                require_once('class_rssfeed.php');
-                $rss = new AutoblogRSS(RSS_FILE);
-                $rss->addCodeChanged($ini['SITE_TITLE'], escape($_GET['check']), $ini['SITE_URL'], $ini['FEED_URL'], $code[1]);
+				updateXML('moved', '3xx', escape($_GET['check']), $ini['SITE_TITLE'], $ini['SITE_URL'], $ini['FEED_URL']);
             }
             file_put_contents($errorlog, '.');
             die($svg_jaune);
@@ -344,7 +346,6 @@ if (isset($_GET['exportopml'])) // OPML
 
 /**
  * Site map
- * NEW AUTOBLOG FOLDER - Need update
  **/
 if (isset($_GET['sitemap']))
 {
@@ -428,10 +429,10 @@ if(!empty($_GET['via_button']) && $_GET['number'] === '17' && ALLOW_NEW_AUTOBLOG
                 $sitetype = $sitetype['type'];
                 $siteDesc = getSiteDesc(escape($_GET['siteDesc']));
 
-                $error = array_merge( $error, createAutoblog($sitetype, $sitename, $siteurl, $rssurl, $siteDesc, $error));
+                createAutoblog( $sitetype, $sitename, $siteurl, $rssurl, $siteDesc, $error);
                 if( empty($error)) {
-                    $form .= '<iframe width="1" height="1" frameborder="0" src="'. AUTOBLOGS_FOLDER . urlToFolderSlash($siteurl) .'/index.php"></iframe>';
-                    $form .= '<p><span style="color:darkgreen">Autoblog <a href="'. AUTOBLOGS_FOLDER . urlToFolderSlash($siteurl) .'">'. $sitename .'</a> ajouté avec succès.</span><br>';
+                    $form .= '<iframe width="1" height="1" frameborder="0" src="'. urlToFolder( $siteurl, $rssurl ) .'/index.php"></iframe>';
+                    $form .= '<p><span style="color:darkgreen">Autoblog <a href="'. urlToFolder( $siteurl, $rssurl ) .'">'. $sitename .'</a> ajouté avec succès.</span><br>';
                 }
                 else {
                     $form .= '<ul>';
@@ -482,26 +483,28 @@ if(!empty($_GET['via_button']) && $_GET['number'] === '17' && ALLOW_NEW_AUTOBLOG
 /**
  * ADD BY SOCIAL / SHAARLI
  **/
-if(!empty($_POST['socialaccount']) && !empty($_POST['socialinstance']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY_SOCIAL)
-{
-    if( !empty($_POST['number']) && !empty($_POST['antibot']) && check_antibot($_POST['number'], $_POST['antibot']) ) {
+if( !empty($_POST['socialinstance']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY_SOCIAL)
+{;
+    $socialinstance = strtolower(escape($_POST['socialinstance']));
+    $socialaccount = (!empty($_POST['socialaccount'])) ? strtolower(escape($_POST['socialaccount'])) : false;
+    if( $socialaccount === false && $socialinstance !== 'shaarli')
+        $error[] = 'Le compte social doit être renseigné.';
 
-        $socialaccount = strtolower(escape($_POST['socialaccount']));
-        $socialinstance = strtolower(escape($_POST['socialinstance']));
+    if( !empty($_POST['number']) && !empty($_POST['antibot']) && check_antibot($_POST['number'], $_POST['antibot']) && empty($error)) {
 
         if($socialinstance === 'twitter') {
             if( API_TWITTER !== FALSE ) {
                 $sitetype = 'twitter';
-                $siteurl = "http://twitter.com/$socialaccount";
+                $siteurl = 'http://twitter.com/'. $socialaccount;
                 $rssurl = API_TWITTER.$socialaccount;
             }
             else
-                $error[] = "Twitter veut mettre à mort son API ouverte. Du coup on peut plus faire ça comme ça.";
+                $error[] = 'Vous devez définir une API Twitter -> RSS dans votre fichier de configuration (see <a href="https://github.com/mitsukarenai/twitterbridge">TwitterBridge</a>).';
         }
         elseif($socialinstance === 'identica') {
             $sitetype = 'identica';
-            $siteurl = "http://identi.ca/$socialaccount";
-            $rssurl = "http://identi.ca/api/statuses/user_timeline/$socialaccount.rss";
+            $siteurl = 'http://identi.ca/'.$socialaccount;
+            $rssurl = 'http://identi.ca/api/statuses/user_timeline/'.$socialaccount.'.rss';
         }
         elseif($socialinstance === 'statusnet' && !empty($_POST['statusneturl'])) {
             $sitetype = 'microblog';
@@ -527,18 +530,25 @@ if(!empty($_POST['socialaccount']) && !empty($_POST['socialinstance']) && ALLOW_
             $socialaccount = get_title_from_feed($rssurl);
         }
 
+
         if( empty($error) ) {
-            // Twitterbridge do NOT allow this user yet => No check
-            if( $sitetype != 'twitter' ) {
-                $headers = get_headers($rssurl, 1);
-                if (strpos($headers[0], '200') == FALSE) {
-                    $error[] = "Flux inaccessible (compte inexistant ?)";
+            try {
+                // TwitterBridge user will be allowed after Autoblog creation
+                // TODO: Twitter user does not exist ?
+				// TODO: get remote like http://wwz.suumitsu.eu/twitter/whitelist.json, decode, check if is in array, return error or continue
+                if($sitetype != 'twitter') {
+                    $headers = get_headers($rssurl, 1);
+                    if (strpos($headers[0], '200') === FALSE)
+                        throw new Exception('Flux inaccessible (compte inexistant ?)');
                 }
+
+                createAutoblog($sitetype, ucfirst($socialinstance) .' - '. $socialaccount, $siteurl, $rssurl);
+                $success[] = '<iframe width="1" height="1" frameborder="0" src="'. urlToFolder( $siteurl, $rssurl ) .'/index.php"></iframe>
+                <b style="color:darkgreen">'.ucfirst($socialinstance) .' - '. $socialaccount.' <a href="'. urlToFolder( $siteurl, $rssurl ) .'">ajouté avec succès</a>.</b>';
             }
-            if( empty($error) ) {
-                $error = array_merge( $error, createAutoblog($sitetype, ucfirst($socialinstance) .' - '. $socialaccount, $siteurl, $rssurl,$siteDesc, $error));
-                if( empty($error))
-                    $success[] = '<iframe width="1" height="1" frameborder="0" src="'. AUTOBLOGS_FOLDER . urlToFolderSlash( $siteurl ) .'/index.php"></iframe><b style="color:darkgreen">'.ucfirst($socialinstance) .' - '. $socialaccount.' <a href="'.urlToFolderSlash( $siteurl ).'">ajouté avec succès</a>.</b>';
+
+            catch (Exception $e) {
+                echo $error[] = $e->getMessage();
             }
         }
     }
@@ -567,10 +577,10 @@ if( !empty($_POST['generic']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY_L
                 $sitename = get_title_from_feed($rssurl);
                 $siteDesc = escape($_POST['siteDesc']);
 
-                $error = array_merge( $error, createAutoblog('generic', $sitename, $siteurl, $rssurl, $siteDesc, $error));
+                createAutoblog('generic', $sitename, $siteurl, $rssurl, $siteDesc, $error);
 
-                if( empty($error))
-                    $success[] = '<iframe width="1" height="1" frameborder="0" src="'. AUTOBLOGS_FOLDER . urlToFolderSlash( $siteurl ) .'/index.php"></iframe><b style="color:darkgreen">Autoblog '. $sitename .' crée avec succès.</b> &rarr; <a target="_blank" href="'. AUTOBLOGS_FOLDER . urlToFolderSlash( $siteurl ) .'">afficher l\'autoblog</a>';
+                $success[] = '<iframe width="1" height="1" frameborder="0" src="'. urlToFolder( $siteurl, $rssurl ) .'/index.php"></iframe>
+                <b style="color:darkgreen">Autoblog '. $sitename .' crée avec succès.</b> &rarr; <a target="_blank" href="'. urlToFolder( $siteurl, $rssurl ) .'">afficher l\'autoblog</a>';
             }
             else {
                 // checking procedure
@@ -584,7 +594,7 @@ if( !empty($_POST['generic']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY_L
                 $sitename = get_title_from_datafeed($datafeed);
                 $siteDesc = getSiteDesc(escape($siteurl));
 
-                $form = '<span style="color:blue">Merci de vérifier les informations suivantes, corrigez si nécessaire.</span><br>
+                $form = '<span style="color:blue">Merci de vérifier les informations suivantes, corrigez si nécessaire. Tous les champs doivent être renseignés.</span><br>
                 <form method="POST"><input type="hidden" name="generic" value="1" />
                 <input style="color:black" type="text" id="sitename" value="'.$sitename.'" '.( $datafeed === false?'':'disabled').'><label for="sitename">&larr; titre du site (auto)</label><br>
                 <input placeholder="Adresse du site" type="text" name="siteurl" id="siteurl" value="'.$siteurl.'"><label for="siteurl">&larr; page d\'accueil (auto)</label><br>
@@ -658,7 +668,7 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
     <head>
     <meta charset="utf-8">
     <title>Projet Autoblog<?php if(strlen(HEAD_TITLE)>0) echo " | " . HEAD_TITLE; ?></title>
-    <link rel="alternate" type="application/rss+xml" title="RSS" href="<?php echo serverUrl(true) . RSS_FILE;?>" />
+    <link rel="alternate" type="application/rss+xml" title="RSS" href="<?php echo serverUrl(false) . '/?rss';?>" />
     <link href="<?php echo RESOURCES_FOLDER; ?>autoblog.css" rel="stylesheet" type="text/css">
     <?php
       if(file_exists(RESOURCES_FOLDER .'user.css')){
@@ -673,10 +683,10 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
         </a></h1>
 
         <div class="pbloc">
-        <?php
-            if (defined('LOGO'))
-                echo '<img id="logo" src="'. RESOURCES_FOLDER . LOGO .'" alt="">';
-        ?>
+            <?php
+                if (defined('LOGO'))
+                    echo '<img id="logo" src="'. RESOURCES_FOLDER . LOGO .'" alt="">';
+            ?>
             <h2>Présentation</h2>
 
             <p>
@@ -688,6 +698,11 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
             <p>
                 Voici une liste d'autoblogs hébergés sur <i><?php echo $_SERVER['SERVER_NAME']; ?></i>
                 (<a href="http://sebsauvage.net/streisand.me/fr/">plus d'infos sur le projet</a>).
+            </p>
+
+            <p>
+                <b>Autres fermes</b>
+                &rarr; <a href="https://duckduckgo.com/?q=!g%20%22Voici%20une%20liste%20d'autoblogs%20hébergés%22">Rechercher</a>
             </p>
         </div>
 
@@ -770,7 +785,7 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
                         <h3>Ajouter un Shaarli</h3>
 
                         <form method="POST">
-                            <input type="hidden" name="socialaccount" value="shaarli">
+                            <input type="hidden" name="socialinstance" value="shaarli">
                             <input placeholder="shaarli.personnel.com" type="text" name="shaarliurl" id="shaarliurl"><br>
                             <input placeholder="Antibot : Ecrivez '<?php echo $antibot; ?>' en chiffres" type="text" name="number"  class="smallinput"><br>
                             <input type="hidden" name="antibot" value="<?php echo $antibot; ?>" />
@@ -844,10 +859,6 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
 
         <div class="pbloc">
             <h2>Autoblogs hébergés <a href="?rss" title="RSS des changements"><img src="<?php echo RESOURCES_FOLDER; ?>rss.png" alt="rss"/></a></h2>
-            <p>
-                <b>Autres fermes</b>
-                &rarr; <a href="https://duckduckgo.com/?q=!g%20%22Voici%20une%20liste%20d'autoblogs%20hébergés%22">Rechercher</a>
-            </p>
 
             <div class="clear"><a href="?sitemap">sitemap</a> | <a href="?export">export<sup> JSON</sup></a> | <a href="?exportopml">export<sup> OPML</sup></a></div>
               <div id="contentVignette">
@@ -859,6 +870,7 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
                     if(is_dir($unit))
                     {
                         if( !file_exists(ROOT_DIR . '/' . $unit . '/.disabled')) {
+							if( file_exists(ROOT_DIR . '/' . $unit . '/vvb.ini')) {
                             $ini = parse_ini_file(ROOT_DIR . '/' . $unit . '/vvb.ini');
                             if($ini)
                             {
@@ -872,6 +884,7 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
                                 $autoblogs[$unit] = $config;
                                 unset($ini);
                             }
+							}
                         }
                     }
                 }
@@ -910,15 +923,15 @@ if( !empty($_POST['opml_file']) && ALLOW_NEW_AUTOBLOGS && ALLOW_NEW_AUTOBLOGS_BY
         <script type="text/javascript">
             <?php if( !empty($_POST['generic']) && !empty($_POST['siteurl']) || empty($_POST['generic']) )
             echo "document.getElementById('add_generic').style.display = 'none';"; ?>
-            document.getElementById('add_social').style.display = 'none';
-            document.getElementById('add_shaarli').style.display = 'none';
-            document.getElementById('add_opmlfile').style.display = 'none';
-            document.getElementById('add_bookmark').style.display = 'none';
-            document.getElementById('add_opmllink').style.display = 'none';
-            document.getElementById('button_list').style.display = 'block';
+            if(document.getElementById('add_social') != null) { document.getElementById('add_social').style.display = 'none'; }
+            if(document.getElementById('add_shaarli') != null) { document.getElementById('add_shaarli').style.display = 'none'; }
+            if(document.getElementById('add_opmlfile') != null) { document.getElementById('add_opmlfile').style.display = 'none'; }
+            if(document.getElementById('add_bookmark') != null) { document.getElementById('add_bookmark').style.display = 'none'; }
+            if(document.getElementById('add_opmllink') != null) { document.getElementById('add_opmllink').style.display = 'none'; }
+            if(document.getElementById('button_list') != null) { document.getElementById('button_list').style.display = 'block'; }
             function show_form(str){
                 document.getElementById('add_'+str).style.display = (document.getElementById('add_'+str).style.display != 'block' ? 'block' : 'none' );
-        document.getElementById('button_'+str).className = (document.getElementById('button_'+str).className != 'buttonactive' ? 'buttonactive' : 'button' );
+                document.getElementById('button_'+str).className = (document.getElementById('button_'+str).className != 'buttonactive' ? 'buttonactive' : 'button' );
             }
         </script>
 
