@@ -16,6 +16,9 @@ if (!defined('FOLDER_MAX_LENGTH')) define('FOLDER_MAX_LENGTH', 80);
 date_default_timezone_set('Europe/Paris');
 setlocale(LC_TIME, 'fr_FR.UTF-8', 'fr_FR', 'fr');
 
+if( !defined('DOCS_CACHE_DURATION')) define( 'DOCS_CACHE_DURATION', 1800 );
+if( !defined('AUTOBLOGS_CACHE_DURATION')) define( 'AUTOBLOGS_CACHE_DURATION', 1800 );
+
 if( !defined('ALLOW_FULL_UPDATE')) define( 'ALLOW_FULL_UPDATE', TRUE );
 if( !defined('ALLOW_CHECK_UPDATE')) define( 'ALLOW_CHECK_UPDATE', TRUE );
 
@@ -29,7 +32,7 @@ if( !defined('ALLOW_NEW_AUTOBLOGS_BY_OPML_LINK')) define( 'ALLOW_NEW_AUTOBLOGS_B
 if( !defined('ALLOW_NEW_AUTOBLOGS_BY_XSAF')) define( 'ALLOW_NEW_AUTOBLOGS_BY_XSAF', TRUE );
 
 // More about TwitterBridge : https://github.com/mitsukarenai/twitterbridge
-if( !defined('API_TWITTER')) define( 'API_TWITTER', FALSE );
+if( !defined('API_TWITTER')) define( 'API_TWITTER', 'LOCAL' );
 
 if( !defined('LOGO')) define( 'LOGO', 'icon-logo.svg' );
 if( !defined('HEAD_TITLE')) define( 'HEAD_TITLE', '');
@@ -39,7 +42,7 @@ if( !defined('FOOTER')) define( 'FOOTER', 'D\'après les premières versions de 
  * Functions
  **/
 function NoProtocolSiteURL($url) {
-	$protocols = array("http://", "https://");
+    $protocols = array("http://", "https://");
 	$siteurlnoproto = str_replace($protocols, "", $url);
 
     // Remove the / at the end of string
@@ -158,8 +161,12 @@ function getArticlesPerPage( $type ) {
 	switch( $type ) {
 		case 'microblog':
 			return 20;
+		case 'twitter':
+			return 20;
 		case 'shaarli':
 			return 20;
+        case 'youtube':
+            return 10;
 		default:
 			return 5;
 	}
@@ -168,6 +175,8 @@ function getArticlesPerPage( $type ) {
 function getInterval( $type ) {
 	switch( $type ) {
 		case 'microblog':
+			return 300;
+		case 'twitter':
 			return 300;
 		case 'shaarli':
 			return 1800;
@@ -178,10 +187,6 @@ function getInterval( $type ) {
 
 function getTimeout( $type ) {
 	switch( $type ) {
-		case 'microblog':
-			return 30;
-		case 'shaarli':
-			return 30;
 		default:
 			return 30;
 	}
@@ -191,11 +196,11 @@ function updateType($siteurl) {
     if( strpos($siteurl, 'twitter.com') !== FALSE ) {
         return array('type' => 'twitter', 'name' => 'twitter');
     }
-    elseif ( strpos( $siteurl, 'identi.ca') !== FALSE ) {
-        return array('type' => 'identica', 'name' => 'identica');
-    }
     elseif( strpos( $siteurl, 'shaarli' ) !== FALSE ) {
         return array('type' => 'shaarli', 'name' => 'shaarli');
+    }
+    elseif( strpos( $siteurl, 'youtube.com' ) !== FALSE ) {
+        return array('type' => 'youtube', 'name' => '');
     }
     else
         return array('type' => 'generic', 'name' => '');
@@ -256,11 +261,14 @@ function __($str)
             return 'Source :';
         case '_date_format':
             return '%A %e %B %Y à %H:%M';
-        case 'configuration':
-        case 'articles':
-            return $str;
         case 'Media export':
             return 'Export fichiers media';
+        case 'Import running: ':
+            return 'Import en cours : ';
+        case ' files remaining':
+            return ' fichiers restants';
+        case 'The page should refresh every second. If not, <a href="javascript:window.location.reload()">refresh manually</a>.':
+            return 'La page devrait se rafraîchir toutes les secondes. Si non, <a href="javascript:window.location.reload()">rafraîchissez là manuellement.</a>.';
         default:
             return $str;
     }
@@ -278,6 +286,7 @@ $json[] = array(
 	'status'=>$status,
 	'response_code'=>$response_code
 	);
+$json = array_slice($json, -50, 50);
 if(file_put_contents(RESOURCES_FOLDER.'rss.json', json_encode($json), LOCK_EX) === FALSE)
 	{ return FALSE; }
 	else { return TRUE; }
@@ -287,47 +296,52 @@ function displayXMLstatus($status, $response_code, $autoblog_url, $autoblog_titl
     switch ($status)
 	{
 	case 'unavailable':
-		return 'Autoblog "'.$autoblog_title.'": site distant inaccessible (code '.$response_code.')<br>Autoblog: <a href="'. serverUrl(false).AUTOBLOGS_FOLDER.$autoblog_url.'">'.$autoblog_title.'</a><br>Site: <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS: <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
+		return 'Autoblog "'.$autoblog_title.'" : site distant inaccessible (code '.$response_code.')<br>Autoblog : <a href="'. serverUrl(true).$autoblog_url.'">'.$autoblog_title.'</a><br>Site : <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS : <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
 	case 'moved':
-		return 'Autoblog "'.$autoblog_title.'": site distant redirigé (code '.$response_code.')<br>Autoblog: <a href="'. serverUrl(false).AUTOBLOGS_FOLDER.$autoblog_url.'">'.$autoblog_title.'</a><br>Site: <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS: <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
+		return 'Autoblog "'.$autoblog_title.'" : site distant redirigé (code '.$response_code.')<br>Autoblog : <a href="'. serverUrl(true).$autoblog_url.'">'.$autoblog_title.'</a><br>Site : <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS : <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
 	case 'not_found':
-		return 'Autoblog "'.$autoblog_title.'": site distant introuvable (code '.$response_code.')<br>Autoblog: <a href="'. serverUrl(false).AUTOBLOGS_FOLDER.$autoblog_url.'">'.$autoblog_title.'</a><br>Site: <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS: <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
+		return 'Autoblog "'.$autoblog_title.'" : site distant introuvable (code '.$response_code.')<br>Autoblog : <a href="'. serverUrl(true).$autoblog_url.'">'.$autoblog_title.'</a><br>Site : <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS : <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
 	case 'remote_error':
-		return 'Autoblog "'.$autoblog_title.'": site distant a problème serveur (code '.$response_code.')<br>Autoblog: <a href="'. serverUrl(false).AUTOBLOGS_FOLDER.$autoblog_url.'">'.$autoblog_title.'</a><br>Site: <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS: <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
+		return 'Autoblog "'.$autoblog_title.'" : site distant a problème serveur (code '.$response_code.')<br>Autoblog : <a href="'. serverUrl(true).$autoblog_url.'">'.$autoblog_title.'</a><br>Site : <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS : <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
 	case 'available':
-		return 'Autoblog "'.$autoblog_title.'": site distant à nouveau opérationnel (code '.$response_code.')<br>Autoblog: <a href="'. serverUrl(false).AUTOBLOGS_FOLDER.$autoblog_url.'">'.$autoblog_title.'</a><br>Site: <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS: <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
+		return 'Autoblog "'.$autoblog_title.'" : site distant à nouveau accessible (code '.$response_code.')<br>Autoblog : <a href="'. serverUrl(true).$autoblog_url.'">'.$autoblog_title.'</a><br>Site : <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS : <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
 	case 'new_autoblog_added':
-		return 'Autoblog "'.$autoblog_title.'" ajouté (code '.$response_code.')<br>Autoblog: <a href="'. serverUrl(false).AUTOBLOGS_FOLDER.$autoblog_url.'">'.$autoblog_title.'</a><br>Site: <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS: <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
+		return 'Autoblog "'.$autoblog_title.'" ajouté.<br>Autoblog : <a href="'. serverUrl(true).$autoblog_url.'">'.$autoblog_title.'</a><br>Site : <a href="'. $autoblog_sourceurl .'">'. $autoblog_sourceurl .'</a><br>RSS : <a href="'.$autoblog_sourcefeed.'">'.$autoblog_sourcefeed.'</a>';
 	}
 }
 
 function displayXML() {
-header('Content-type: application/rss+xml; charset=utf-8');
-echo '<?xml version="1.0" encoding="UTF-8" ?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><link>'.serverUrl(true).'</link>';
-echo '<atom:link href="'.serverUrl(false) . '/?rss" rel="self" type="application/rss+xml"/><title>Projet Autoblog'. ((strlen(HEAD_TITLE)>0) ? ' | '. HEAD_TITLE : '').'</title><description>'.serverUrl(true),"Projet Autoblog - RSS : Ajouts et changements de disponibilité.".'</description>';
-if(file_exists(RESOURCES_FOLDER.'rss.json'))
-{
-	$json = json_decode(file_get_contents(RESOURCES_FOLDER.'rss.json'), true);
-	rsort($json);
-	foreach ($json as $item)
+	header('Content-type: application/rss+xml; charset=utf-8');
+	echo '<?xml version="1.0" encoding="UTF-8" ?>
+	<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><link>'.serverUrl(true).'</link>';
+	echo '<atom:link href="'.serverUrl(true) . '/?rss" rel="self" type="application/rss+xml"/><title>Projet Autoblog'. ((strlen(HEAD_TITLE)>0) ? ' | '. HEAD_TITLE : '').'</title><description>Projet Autoblog - RSS : Ajouts et changements de disponibilité.</description>';
+	if(file_exists(RESOURCES_FOLDER.'rss.json'))
 	{
-	$description = displayXMLstatus($item['status'],$item['response_code'],$item['autoblog_url'],$item['autoblog_title'],$item['autoblog_sourceurl'],$item['autoblog_sourcefeed']);
-	$link = serverUrl(true).AUTOBLOGS_FOLDER.$item['autoblog_url'];
-	$date = date("r", $item['timestamp']);
-	print <<<EOT
+		$json = json_decode(file_get_contents(RESOURCES_FOLDER.'rss.json'), true);
+		rsort($json);
+		foreach ($json as $uitem)
+		{
+			$item = array();
+			foreach($uitem AS $Key => $Value) {
+				$item[$Key] = escape($Value);
+			}
+
+			$description = displayXMLstatus($item['status'],$item['response_code'],$item['autoblog_url'],$item['autoblog_title'],$item['autoblog_sourceurl'],$item['autoblog_sourcefeed']);
+			$link = serverUrl(true).$item['autoblog_url'];
+			$date = date(DATE_RSS, $item['timestamp']);
+			print <<<EOT
 
 <item>
 	<title>{$item['autoblog_title']}</title>
 	<description><![CDATA[{$description}]]></description>
 	<link>{$link}</link>
 	<guid isPermaLink="false">{$item['timestamp']}</guid>
-	<author>admin@{$_SERVER['SERVER_NAME']}</author>
+	<dc:creator>Autoblog</dc:creator>
 	<pubDate>{$date}</pubDate>
 </item>
 EOT;
+		}
 	}
-}
-echo '</channel></rss>';
+	echo '</channel></rss>';
 }
 ?>

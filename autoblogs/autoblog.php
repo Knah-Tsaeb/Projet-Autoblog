@@ -8,7 +8,7 @@
     - Source feed MUST be valid UTF-8
     - Source feed MUST contain article body
 
-    This program is public domain. COPY COPY COPY !
+    This program is public domain. COPY COPY COPY!
 */
 $vvbversion = '0.3.0';
 if (!version_compare(phpversion(), '5.3.0', '>='))
@@ -41,7 +41,7 @@ if (!defined('MEDIA_DIR'))          define('MEDIA_DIR', ROOT_DIR . '/media');
 if (!defined('LOCAL_URL'))
 {
     // Automagic URL discover
-    define('LOCAL_URL', 'http' . (!empty($_SERVER['HTTPS']) ? 's' : '')."://{$_SERVER['HTTP_HOST']}{$_SERVER['REQUEST_URI']}");
+    define('LOCAL_URL', 'http' . (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on' ? 's' : '')."://{$_SERVER['HTTP_HOST']}{$_SERVER['REQUEST_URI']}");
 }
 
 if (!defined('LOCAL_URI'))
@@ -121,7 +121,7 @@ function exception_handler($e)
         exit;
     }
 
-    $error = "Error happened !\n\n".
+    $error = "Error happened!\n\n".
         $e->getCode()." - ".$e->getMessage()."\n\nIn: ".
         $e->getFile() . ":" . $e->getLine()."\n\n";
 
@@ -328,6 +328,11 @@ class VroumVroum_Blog
 
         return true;
     }
+    
+    public function mustUpdateXsaf()
+    {          
+        return file_exists('import.json');
+    }
 
     protected function _getStreamContext()
     {
@@ -375,9 +380,12 @@ class VroumVroum_Blog
             {
                 $date = isset($item->published) ? (string) $item->published : (string) $item->updated;
                 $guid = !empty($item->id) ? (string)$item->id : (string)$item->link['href'];
-
+                
+                if( count($item->content->children()) > 0 ) $content = (string)$item->content->asXML();
+                else $content = (string)$item->content;
+                
                 $id = $this->insertOrUpdateArticle($guid, (string)$item->title,
-                    (string)$item->link['href'], strtotime($date), (string)$item->content);
+                    (string)$item->link['href'], strtotime($date), $content );
 
                 if ($id !== false)
                     $updated++;
@@ -425,6 +433,34 @@ class VroumVroum_Blog
 
         return $updated;
     }
+    
+    public function updateXsaf() {
+        if($this->mustUpdateXsaf()) {
+    	    $json = json_decode(file_get_contents('import.json'), true);
+    		$count = count($json['files']);
+    		file_put_contents('import.lock', $count); /* one-process locking */
+    		$remoteurl = $json['url'];
+    		if (!file_exists('media'))  { 
+                mkdir('media'); 
+            }
+    		$time = time();
+    		$maxtime = $time + 3;   /* max exec time: 3 seconds */
+            
+    		while ($time <= $maxtime) {
+    			$file = array_shift($json['files']);  /* get first element while unstacking */
+    			if(!empty($file)) { 
+                    $this->_copy($remoteurl.$file, "media/$file"); 
+                    file_put_contents('import.json', json_encode($json)); 
+                }
+    			else { 
+                    unlink('import.json'); 
+                    break; 
+                }  /* first element empty: import finished */
+    			$time = time();
+			}            
+    		unlink('import.lock');
+		}
+    }
 
     public function listArticlesByPage($page = 1)
     {
@@ -467,6 +503,7 @@ class VroumVroum_Blog
         $res = $this->articles->query('SELECT id, uri, title, content
             FROM articles
             WHERE content LIKE \'%'.$this->articles->escapeString($query).'%\'
+            OR title LIKE \'%'.$this->articles->escapeString($query).'%\'
             ORDER BY id DESC
             LIMIT 0,100;');
 
@@ -537,6 +574,13 @@ class VroumVroum_Blog
         }
         return $content;
     }
+    
+    public function getXsafCounter() {
+        if($this->mustUpdateXsaf()) {
+            $json = json_decode(file_get_contents('import.json'), true);
+            return count($json['files']);
+        }
+    }
 
     /* copy() is buggy with http streams and safe_mode enabled (which is bad), so here's a workaround */
     protected function _copy($from, $to)
@@ -583,7 +627,7 @@ if (isset($_GET['feed'])) // FEED
                 <updated>'.date(DATE_ATOM, $art['date']).'</updated>
 
                 <content type="html">
-                    <![CDATA[(<a href="'.escape($art['feed_id']).'">source</a>)<br />'.escape_content($art['content']).']]>
+                    <![CDATA[(<a href="'.escape($art['url']).'">source</a>)<br />'.escape_content($art['content']).']]>
                 </content>
             </entry>';
     }
@@ -649,6 +693,7 @@ if (!$search && !empty($_SERVER['QUERY_STRING']) && !is_numeric($_SERVER['QUERY_
 }
 
 //  common CSS
+<<<<<<< HEAD
 $css='    * { margin: 0; padding: 0; }
     body { font-family:sans-serif; background-color: #efefef; padding: 1%; color: #333; }
     img { max-width: 100%; height: auto; }
@@ -676,48 +721,108 @@ $css='    * { margin: 0; padding: 0; }
     .content h2 { font-size: 1.4em;color:#000; }
     .result h3 a { color: darkblue; text-decoration: none; text-shadow: 1px 1px 1px #fff; }
     #error { position: fixed; top: 0; left: 0; right: 0; padding: 1%; background: #fff; border-bottom: 2px solid red; color: darkred; }
+||||||| merged common ancestors
+$css='    * { margin: 0; padding: 0; }
+    body { font-family:sans-serif; background-color: #efefef; padding: 1%; color: #333; }
+    img { max-width: 100%; height: auto; }
+	a { text-decoration: none; color: #000;font-weight:bold; } 
+   .header a { text-decoration: none; color: #000;font-weight:bold; }
+    .header { text-align:center; padding: 30px 3%; max-width:70em;margin:0 auto; }
+	.article .title { margin-bottom: 1em; }
+    .article .title h2 a:hover { color:#403976; }
+	.article h4 { font-weight: normal; font-size: small; color: #666; }
+	.article .source a { color: #666; }
+	.searchForm { float:right; }
+	.searchForm input { }
+    .pagination {  background-color:white;padding: 12px 10px 12px 10px;border:1px solid #aaa;max-width:70em;margin:1em auto;box-shadow:0px 5px 7px #aaa; }
+    .pagination b { font-size: 1.2em; color: #333; }
+    .pagination a { color:#000; margin: 0 0.5em; }
+    .pagination a:hover { color:#333; }
+    .footer a { color:#000; }
+    .footer a:hover { color:#333; }
+    .content ul, .content ol { margin-left: 2em; }
+    .content h1, .content h2, .content h3, .content h4, .content h5, .content h6,
+        .content ul, .content ol, .content p, .content object, .content div, .content blockquote,
+        .content dl, .content pre { margin-bottom: 0.8em; }
+    .content pre, .content blockquote { background: #ddd; border: 1px solid #999; padding: 0.2em; max-width: 100%; overflow: auto; }
+    .content h1 { font-size: 1.5em; }
+    .content h2 { font-size: 1.4em;color:#000; }
+    .result h3 a { color: darkblue; text-decoration: none; text-shadow: 1px 1px 1px #fff; }
+    #error { position: fixed; top: 0; left: 0; right: 0; padding: 1%; background: #fff; border-bottom: 2px solid red; color: darkred; }
+=======
+$css='* { margin: 0; padding: 0; }
+      body { font-family:sans-serif; background-color: #efefef; padding: 1%; color: #333; }
+      img { max-width: 100%; height: auto; }
+      a { text-decoration: none; color: #000;font-weight:bold; } 
+      body > header a { text-decoration: none; color: #000;font-weight:bold; }
+      body > header { text-align:center; padding: 30px 3%; max-width:70em;margin:0 auto; }
+      body > article > header { margin-bottom: 1em; }
+      body > article > header h2 a:hover { color:#403976; }
+      body > article h4 { font-weight: normal; font-size: small; color: #666; }
+      body > article .source a { color: #666; }
+      body > header > form { float:right; }
+      body > header > form input { }
+      body > nav {  background-color:white;padding: 12px 10px 12px 10px;border:1px solid #aaa;max-width:70em;margin:1em auto;box-shadow:0px 5px 7px #aaa; }
+      body > nav strong { font-size: 1.2em; color: #333; }
+      body > nav a { color:#000; margin: 0 0.5em; }
+      body > nav a:hover { color:#333; }
+      body > footer a { color:#000; }
+      body > footer a:hover { color:#333; }
+      .content ul, .content ol { margin-left: 2em; }
+      .content h1, .content h2, .content h3, .content h4, .content h5, .content h6,
+      .content ul, .content ol, .content p, .content object, .content div, .content blockquote,
+      .content dl, .content pre { margin-bottom: 0.8em; }
+      .content pre, .content blockquote { background: #ddd; border: 1px solid #999; padding: 0.2em; max-width: 100%; overflow: auto; }
+      .content h1 { font-size: 1.5em; }
+      .content h2 { font-size: 1.4em;color:#000; }
+      .result h3 a { color: darkblue; text-decoration: none; text-shadow: 1px 1px 1px #fff; }
+      #error { position: fixed; top: 0; left: 0; right: 0; padding: 1%; background: #fff; border-bottom: 2px solid red; color: darkred; }
+>>>>>>> master
 ';
 
-if($site_type == 'generic') // custom CSS for generic
-	{
-    $css = $css.'.header h1 a { color: #333;font-size:40pt;text-shadow: #ccc 0px 5px 5px;text-transform:uppercase; }
-    .article .title h2 { margin: 0; color:#333; text-shadow: 1px 1px 1px #fff; }
-    .article .title h2 a { color:#000; text-decoration:none; }
-	.article .source { font-size: 0.8em; color: #666; }
-    .article { background-color:white;padding: 12px 10px 12px 10px;border:1px solid #aaa;max-width:70em;margin:1em auto;box-shadow:0px 5px 7px #aaa; }
-    .footer { text-align:center; font-size: small; color:#333; clear: both; }';
-    }
-	else if($site_type == 'microblog' || $site_type == 'twitter' || $site_type == 'identica') // custom CSS for microblog
-	{
-    $css = $css.'.header h1 a { color: #333;font-size:40pt;text-shadow: #ccc 0px 5px 5px; }
-    .article .title h2 { width: 10em;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;font-size: 0.7em;margin: 0; color:#333; text-shadow: 1px 1px 1px #fff; }
-    .article .title h2 a { color:#333; text-decoration:none; }
-    .article { background-color:white;padding: 12px 10px 12px 10px;border:1px solid #aaa;max-width:70em;margin:0 auto;box-shadow:0px 5px 7px #aaa; }
-    .article .source { font-size: 0.8em; color: #666; }
-    .footer { margin-top:1em;text-align:center; font-size: small; color:#333; clear: both; }
-	.content {font-size:0.9em;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}';
-	}
-	else if($site_type == 'shaarli') // custom CSS for shaarli
-	{
-    $css = $css.'.header h1 a { color: #333;font-size:40pt;text-shadow: #ccc 0px 5px 5px; }
-    .article .title h2 { margin: 0; color:#333; text-shadow: 1px 1px 1px #fff; }
-    .article .title h2 a { color:#000; text-decoration:none; }
-    .article { background-color:white;padding: 12px 10px 12px 10px;border:1px solid #aaa;max-width:70em;margin:1em auto;box-shadow:0px 5px 7px #aaa; }
-    .article .source { margin-top:1em;font-size: 0.8em; color: #666; }
-    .footer { text-align:center; font-size: small; color:#333; clear: both; }';
-	}
-
+switch($site_type) {
+    case 'microblog':
+    case 'twitter':
+        $css .= "\n".'      /* twitter/microblog style */
+      body > header h1 a { color: #333;font-size:40pt;text-shadow: #ccc 0px 5px 5px; }
+      body > article > header h2 { width: 10em;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;font-size: 0.7em;margin: 0; color:#333; text-shadow: 1px 1px 1px #fff; }
+      body > article > header h2 a { color:#333; text-decoration:none; }
+      body > article { background-color:white;padding: 12px 10px 33px;border:1px solid #aaa;max-width:70em;margin:0 auto;box-shadow:0px 5px 7px #aaa; }
+      body > article .source { font-size: 0.8em; color: #666; }
+      body > footer { margin-top:1em;text-align:center; font-size: small; color:#333; clear: both; }
+      .content {font-size:0.9em;white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}';
+        break;
+    case 'shaarli':
+        $css .= "\n".'      /* shaarli style */
+      body > header h1 a { color: #333;font-size:40pt;text-shadow: #ccc 0px 5px 5px; }
+      body > article > header title h2 { margin: 0; color:#333; text-shadow: 1px 1px 1px #fff; }
+      body > article > header h2 a { color:#000; text-decoration:none; }
+      body > article { background-color:white;padding: 12px 10px 33px;border:1px solid #aaa;max-width:70em;margin:1em auto;box-shadow:0px 5px 7px #aaa; }
+      body > article footer.source { margin-top:1em;font-size: 0.8em; color: #666; }
+      body > footer { text-align:center; font-size: small; color:#333; clear: both; }';
+        break;
+    case 'generic':
+    case 'youtube':
+    default:
+        $css .= "\n".'      /* youtube style */
+      body > header h1 a { color: #333;font-size:40pt;text-shadow: #ccc 0px 5px 5px;text-transform:uppercase; }
+      body > article > header h2 { margin: 0; color:#333; text-shadow: 1px 1px 1px #fff; }
+      body > article > header h2 a { color:#000; text-decoration:none; }
+      body > article footer.source { font-size: 0.8em; color: #666; }
+      body > article { background-color:white;padding: 12px 10px 33px;border:1px solid #aaa;max-width:70em;margin:1em auto;box-shadow:0px 5px 7px #aaa; }
+      body > footer { text-align:center; font-size: small; color:#333; clear: both; }';
+}
 
 // HTML HEADER
-echo '
-<!DOCTYPE html>
-<html lang="en" dir="ltr">
-<head>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+echo '<!DOCTYPE html>
+<html lang="fr" dir="ltr">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" charset="utf-8" />
     <title>'.escape($config->site_title).'</title>
     <link rel="canonical" href="'.escape($config->site_url).'">
     <link rel="alternate" type="application/atom+xml" title="'.__('ATOM Feed').'" href="?feed">
     <style type="text/css" media="screen,projection">
+<<<<<<< HEAD
     '.$css.'
     </style>
 </head>
@@ -731,66 +836,111 @@ if (!empty($config->site_description)){
     echo '<p>'.$config->site_description.'<br><a href="../../">&lArr; retour index</a></p>';
 }
     echo '<p class="pagination">'.$config->site_meta_description.'<br></p>';
+||||||| merged common ancestors
+    '.$css.'
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1><a href="../../" style="font-size:0.8em;">PROJET AUTOBLOG'. (strlen(HEAD_TITLE) > 0 ? ' ~ '. HEAD_TITLE : '') .'</a></h1>
+    <hr>
+    <h1><a href="./">'.escape($config->site_title).'</a></h1>';
+
+if (!empty($config->site_description))
+    echo '<p>'.$config->site_description.'<br><a href="../../">&lArr; retour index</a></p>';
+
+=======
+      '.$css.'
+    </style>';
+    if( $vvb->mustUpdateXsaf()) {
+      echo '    <meta http-equiv="Refresh" content="1">';
+    }
 echo '
-    <form method="get" action="'.escape(LOCAL_URL).'" class="searchForm">
-    <div>
-        <input type="text" name="q" value="'.escape($search).'">
-        <input type="submit" value="'.__('Search').'">
-    </div>
-    </form>
-</div>
+  </head>
+  <body>
+    <header>
+      <h1><a href="../../" style="font-size:0.8em;">PROJET AUTOBLOG'. (strlen(HEAD_TITLE) > 0 ? ' ~ '. HEAD_TITLE : '') .'</a></h1>
+      <hr />
+      <h1><a href="./">'.escape($config->site_title).'</a></h1>';
+       
+       if (!empty($config->site_description))
+         echo '
+      <p>'.$config->site_description.'</p>
+      <p><a href="../../">&lArr; retour index</a></p>';
+
+>>>>>>> master
+echo '
+      <form method="get" action="'.escape(LOCAL_URL).'">
+        <input type="search" name="q" value="'.escape($search).'" />
+        <input type="submit" value="'.__('Search').'" />
+      </form>
+    </header>
 ';
 
-if ($vvb->mustUpdate())
+if( $vvb->mustUpdateXsaf()) {
+    echo '
+    <article>
+      <header>
+        <h2>'.__('Update').'</h2>
+      </header>
+      <div class="content" id="update">
+        '.__('Import running: '). $vvb->getXsafCounter() . __(' files remaining').'<br>
+        '.__('The page should refresh every second. If not, <a href="javascript:window.location.reload()">refresh manually</a>.').'
+      </div>
+    </article>';
+}
+elseif ($vvb->mustUpdate())
 {
     echo '
-    <div class="article">
-        <div class="title">
-            <h2>'.__('Update').'</h2>
-        </div>
-        <div class="content" id="update">
-            '.__('Updating database... Please wait.').'
-        </div>
-    </div>';
+    <article>
+      <header>
+        <h2>'.__('Update').'</h2>
+      </header>
+      <div class="content" id="update">
+        '.__('Updating database... Please wait.').'
+      </div>
+    </article>';
 }
 
 if (!empty($search))
 {
     $results = $vvb->searchArticles($search);
-    $text = sprintf(__('<b>%d</b> results for <i>%s</i>'), count($results), escape($search));
+    $text = sprintf(__('<strong>%d</strong> results for <em>%s</em>'), count($results), escape($search));
     echo '
-    <div class="article">
-        <div class="title">
-            <h2>'.__('Search').'</h2>
-            '.$text.'
-        </div>
-    </div>';
+    <article id="results">
+      <header>
+        <h2>'.__('Search').'</h2>
+        '.$text.'
+      </header>
+    <article>';
 
     foreach ($results as $art)
     {
         echo '
-        <div class="article result">
-            <h3><a href="./?'.escape($art['uri']).'">'.escape($art['title']).'</a></h3>
-            <p>'.$art['content'].'</p>
-        </div>';
+    <article class="result">
+      <header>
+        <h3><a href="./?'.escape($art['uri']).'">'.escape($art['title']).'</a></h3>
+      </header>
+      <p>'.$art['content'].'</p>
+    </article>';
     }
 }
 elseif (!is_null($article))
 {
     if (!$article)
     {
-        echo '
-        <div class="article">
-            <div class="title">
-                <h2>'.__('Not Found').'</h2>
-                '.(!empty($uri) ? '<p><tt>'.escape($vvb->getLocalURL($uri)) . '</tt></p>' : '').'
-                '.__('Article not found.').'
-            </div>
-        </div>';
+      echo '
+    <article>
+      <header>
+        <h2>'.__('Not Found').'</h2>
+        '.(!empty($uri) ? '<p><tt>'.escape($vvb->getLocalURL($uri)) . '</tt></p>' : '').'
+        '.__('Article not found.').'
+      </header>
+    </article>';
     }
     else
     {
-        display_article($article);
+      display_article($article);
     }
 }
 else
@@ -808,35 +958,54 @@ else
     }
 
     $max = $vvb->countArticles();
-    if ($max > $config->articles_per_page)
-    {
-        echo '<div class="pagination">';
+    if ($max > $config->articles_per_page) {
+      echo "\n".'    <nav>'."\n";
+      if ($page > 1)
+        echo '      <a rel="prev" href="'.$vvb->getLocalURL($page - 1).'">&larr; '.__('Newer').'</a>'."\n";
 
-        if ($page > 1)
-            echo '<a href="'.$vvb->getLocalURL($page - 1).'">&larr; '.__('Newer').'</a> ';
+      $last = ceil($max / $config->articles_per_page);
+      for ($i = 1; $i <= $last; $i++) {
+        echo '      '.($i == $page ? '<strong>'.$i.'</strong>' : '<a href="'.$vvb->getLocalURL($i).'">'.$i.'</a>')."\n";
+      }
 
-        $last = ceil($max / $config->articles_per_page);
-        for ($i = 1; $i <= $last; $i++)
-        {
-            echo '<a href="'.$vvb->getLocalURL($i).'">'.($i == $page ? '<b>'.$i.'</b>' : $i).'</a> ';
-        }
+      if ($page < $last)
+        echo '      <a rel="next" href="'.$vvb->getLocalURL($page + 1).'">'.__('Older').' &rarr;</a>'."\n";
 
-        if ($page < $last)
-            echo '<a href="'.$vvb->getLocalURL($page + 1).'">'.__('Older').' &rarr;</a> ';
-
-        echo '</div>';
+      echo '    </nav>';
     }
 }
 
 echo '
-<div class="footer">
-    <p>Propulsé par <a href="https://github.com/mitsukarenai/Projet-Autoblog">Projet Autoblog '.$vvbversion.'</a> - <a href="?feed">'.__('ATOM Feed').'</a></p>
-    <p>'.__('Download:').' <a href="./'.basename(CONFIG_FILE).'">'.__('configuration').'</a> (<a href="?opml">OPML</a>)
-        - <a href="./'.basename(ARTICLES_DB_FILE).'">'.__('articles').'</a><p/>
-    <p><a href="./?media">'.__('Media export').' <sup> JSON</sup></a></p>
-</div>';
+    <footer>
+      <p>Propulsé par <a href="https://github.com/mitsukarenai/Projet-Autoblog">Projet Autoblog '.$vvbversion.'</a> - <a href="?feed">'.__('ATOM Feed').'</a></p>
+      <p>'.__('Download:').' <a href="./'.basename(CONFIG_FILE).'">'.__('configuration').'</a> (<a href="?opml">OPML</a>)
+        — <a href="./'.basename(ARTICLES_DB_FILE).'">'.__('articles').'</a></p>
+      <p><a href="./?media">'.__('Media export').' <sup> JSON</sup></a></p>
+    </footer>';
 
-if ($vvb->mustUpdate())
+if( $vvb->mustUpdateXsaf() ) {
+    try {
+        ob_end_flush();
+        flush();
+    }
+    catch (Exception $e)
+    {
+        // Silent, not critical
+    }
+
+    try {
+        $updated = $vvb->updateXsaf();
+    }
+    catch (VroumVroum_Feed_Exception $e)
+    {
+        echo '
+    <div id="error">
+      '.escape($e->getMessage()).'
+    </div>';
+        $updated = 0;
+    }
+}
+elseif ($vvb->mustUpdate())
 {
     try {
         ob_end_flush();
@@ -853,34 +1022,34 @@ if ($vvb->mustUpdate())
     catch (VroumVroum_Feed_Exception $e)
     {
         echo '
-        <div id="error">
+    <div id="error">
             '.escape($e->getMessage()).'
-        </div>';
+    </div>';
         $updated = 0;
     }
 
     if ($updated > 0)
     {
         echo '
-        <script type="text/javascript">
-        window.onload = function () {
-            document.getElementById("update").innerHTML = "'.__('Update complete!').' <a href=\\"#reload\\" onclick=\\"window.location.reload();\\">'.__('Click here to reload this webpage.').'</a>";
-        };
-        </script>';
+    <script type="text/javascript">
+      window.onload = function () {
+        document.getElementById("update").innerHTML = "'.__('Update complete!').' <a href=\\"#reload\\" onclick=\\"window.location.reload();\\">'.__('Click here to reload this webpage.').'</a>";
+      };
+    </script>';
     }
     else
     {
         echo '
-        <script type="text/javascript">
-        window.onload = function () {
-            document.body.removeChild(document.getElementById("update").parentNode);
-        };
-        </script>';
+     <script type="text/javascript">
+       window.onload = function () {
+         document.body.removeChild(document.getElementById("update").parentNode);
+       };
+     </script>';
     }
 }
 
 echo '
-</body>
+  </body>
 </html>';
 
 
@@ -896,15 +1065,14 @@ function display_article($article)
 {
     global $vvb, $config;
     echo '
-    <div class="article">
-        <div class="title">
-            <h2><a href="'.$vvb->getLocalURL($article).'">'.escape($article['title']).'</a></h2>
-            '.strftime(__('_date_format'), $article['date']).'
-        </div>
-        <div class="content">'.escape_content($article['content']).'</div>
-        <p class="source">'.__('Source:').' <a href="'.escape($article['url']).'">'.escape($article['url']).'</a></p>
-        <br style="clear: both;" />
-    </div>';
+    <article>
+      <header>
+        <h2><a href="'.$vvb->getLocalURL($article).'">'.escape($article['title']).'</a></h2>
+        '.strftime(__('_date_format'), $article['date']).'
+      </header>
+      <div class="content">'.escape_content($article['content']).'</div>
+      <footer class="source"><p>'.__('Source:').' <a href="'.escape($article['url']).'">'.escape($article['url']).'</a></p></footer>
+    </article>';
 }
 
 ?>

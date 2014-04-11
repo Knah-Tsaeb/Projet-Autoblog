@@ -1,9 +1,15 @@
 config.php
 .versionlock
 .xsaflock
+.updatealllock
 resources/rss.xml
 resources/rss.json
 .project
 resources/user.css
 autoblogs/*
 !autoblogs/autoblog.php
+docs/*
+!docs/docs.txt
+robots.txt
+.idea
+cache_*

@@ -2,10 +2,12 @@
 
 define('DEBUG', false);
 define('XSAF_VERSION', 3);
-define('AUTOBLOG_FILE_NAME', 'autoblog.php');
-define('ALLOW_REMOTE_DB_DL', false);
-define('ALLOW_REMOTE_MEDIA_DL', false);
-define('EXEC_TIME', 20);
+define('AUTOBLOG_FILE_NAME', 'autoblog.php'); // useless ?
+define('ALLOW_REMOTE_DB_DL', true);
+define('ALLOW_REMOTE_MEDIA_DL', true);
+define('EXEC_TIME', 10);
+
+date_default_timezone_set('UTC');
 
 header("HTTP/1.0 403 Forbidden");   /* Uncivilized method to prevent bot indexing, huh :) */
 header('X-Robots-Tag: noindex');    /* more civilized method, but bots may not all take into account */
@@ -75,17 +77,12 @@ function xsafimport($xsafremote, $max_exec_time) {
     $get_remote_media = ($json_import['meta']['xsaf-media_transfer'] == "true") ? true : false;
 
     if(!empty($json_import['autoblogs'])) {
-      foreach ($json_import['autoblogs'] as $value) {
-
+      foreach ($json_import['autoblogs'] as $remote_folder => $value) {
+        if(DEBUG) debug('remote = '. $remote_folder);
         if(count($value)==4 && !empty($value['SITE_TYPE']) && !empty($value['SITE_TITLE']) && !empty($value['SITE_URL']) && !empty($value['FEED_URL'])) {
           $sitetype = escape($value['SITE_TYPE']);
           $sitename = escape($value['SITE_TITLE']);
           $siteurl = escape($value['SITE_URL']);
-          if(empty($value['SITE_META_DESCRIPTION'])){
-            $siteDesc = getSiteDesc(escape($value['SITE_URL']));
-          } else {
-            $siteDesc = escape($value['SITE_META_DESCRIPTION']);
-          }
           // Do not use DetectRedirect because it's slow and it has been used when the feed was added
           //$rssurl = DetectRedirect(escape($value['FEED_URL']));
           $rssurl = escape($value['FEED_URL']);
@@ -100,10 +97,10 @@ function xsafimport($xsafremote, $max_exec_time) {
 
         /* autoblog */
         if( $result === true ) {
-          $foldername = urlToFolder($sitename, $rssurl);
+          $foldername = urlToFolder($siteurl, $rssurl);
 
           try {
-            createAutoblog($sitetype, $sitename, $siteurl, $rssurl,$siteDesc);
+            createAutoblog($sitetype, $sitename, $siteurl, $rssurl);
 
             if( DEBUG ) {
               echo '<p>autoblog '. $sitename .' crée avec succès (DL DB : '. var_dump($get_remote_db) .' - DL media : '. var_dump($get_remote_media) .') : '. $foldername .'</p>';
@@ -114,23 +111,23 @@ function xsafimport($xsafremote, $max_exec_time) {
             /* ============================================================================================================================================================================== */
             /* récupération de la DB distante */
             if($get_remote_db == true && ALLOW_REMOTE_DB_DL ) {
-                  $remote_db = str_replace("?export", $foldername."/articles.db", $xsafremote);
+                  $remote_db = str_replace("?export", $remote_folder."/articles.db", $xsafremote);
                   copy($remote_db, './'. $foldername .'/articles.db');
               }
-
+            /* préparation à la récupération des médias distants */
             if($get_remote_media == true && ALLOW_REMOTE_MEDIA_DL ) {
-              $remote_media=str_replace("?export", $foldername."/?media", $xsafremote);
+                            $remote_media=str_replace("?export", $remote_folder."/?media", $xsafremote);
+                            if(DEBUG)
+                                debug("Récupération de la liste des médias à $remote_media <br>");
               $json_media_import = file_get_contents($remote_media);
-              if(!empty($json_media_import))
-                {
-                mkdir('./'.$foldername.'/media/');
-                $json_media_import = json_decode($json_media_import, true);
-                $media_path=$json_media_import['url'];
-                if(!empty($json_media_import['files'])) {
-                  foreach ($json_media_import['files'] as $value) {
-                    copy($media_path.$value, './'.$foldername.'/media/'.$value);
-                  }
-                }
+                            if(DEBUG)
+                                debug($json_media_import);
+                            $media_data = json_decode($json_media_import, true);
+                            if(DEBUG)
+                                debug($media_data);
+              if(!empty($json_media_import) && $media_data !== null && !empty($media_data['files']))
+              {
+                  file_put_contents('./'. $foldername .'/import.json', $json_media_import);
               }
             }
 
